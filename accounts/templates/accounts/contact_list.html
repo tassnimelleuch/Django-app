@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>My Contacts</title>
+    <style>
+        body { font-family: Arial; margin: 40px; }
+        .header { display: flex; justify-content: space-between; align-items: center; }
+        .btn { background: #4CAF50; color: white; padding: 10px 15px; text-decoration: none; }
+        .contact-card { border: 1px solid #ddd; padding: 15px; margin: 10px 0; }
+        .empty-state { color: #666; font-style: italic; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📇 My Contacts</h1>
+        <div>
+            <a href="{% url 'dashboard' %}" class="btn">← Dashboard</a>
+            <a href="{% url 'add_contact' %}" class="btn" style="background: #2196F3;">+ Add Contact</a>
+        </div>
+    </div>
+    
+    {% if contacts %}
+        <p>You have {{ contacts.count }} contact(s)</p>
+        
+        {% for contact in contacts %}
+        <div class="contact-card">
+            <h3>{{ contact.first_name }} {{ contact.last_name }}</h3>
+            <p>📧 {{ contact.email|default:"No email" }}</p>
+            <p>🔗 {{ contact.linkedin|default:"No LinkedIn" }}</p>
+            <p>📅 Added: {{ contact.created_at|date:"M d, Y" }}</p>
+            <a href="{% url 'contact_detail' contact.id %}">View Details →</a>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="empty-state">
+            <p>You don't have any contacts yet.</p>
+            <a href="{% url 'add_contact' %}" class="btn">Add Your First Contact</a>
+        </div>
+    {% endif %}
+</body>
+</html>

@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Edit Contact</title>
+    <style>
+        body { font-family: Arial; margin: 40px; max-width: 600px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input, select { width: 100%; padding: 8px; box-sizing: border-box; }
+        .section { background: #f9f9f9; padding: 15px; margin: 20px 0; border-left: 4px solid #4CAF50; }
+        .btn { background: #4CAF50; color: white; padding: 10px 20px; border: none; cursor: pointer; }
+        .btn-cancel { background: #999; margin-left: 10px; }
+        .back-link { margin-bottom: 20px; }
+        .back-link a { color: #4CAF50; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="back-link">
+        <a href="{% url 'contact_detail' contact.id %}">← Back to {{ contact.first_name }} {{ contact.last_name }}</a>
+    </div>
+    
+    <h1>✏️ Edit Contact</h1>
+    
+    <form method="POST">
+        {% csrf_token %}
+        
+        <div class="section">
+            <h3>Contact Information</h3>
+            {{ form.as_p }}
+        </div>
+        
+        <button type="submit" class="btn">Save Changes</button>
+        <a href="{% url 'contact_detail' contact.id %}" class="btn btn-cancel">Cancel</a>
+    </form>
+</body>
+</html>

@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{ contact.first_name }} {{ contact.last_name }}</title>
+    <style>
+        body { font-family: Arial; margin: 40px; }
+        .contact-header { background: #f0f8ff; padding: 20px; border-radius: 5px; }
+        .section { margin: 30px 0; }
+        .btn { background: #4CAF50; color: white; padding: 8px 15px; text-decoration: none; display: inline-block; margin-right: 10px; }
+        .phone-badge, .address-card { 
+            background: #e8f5e8; padding: 10px; margin: 5px 0; 
+            border-left: 3px solid #4CAF50;
+        }
+    </style>
+</head>
+<body>
+    <a href="{% url 'contact_list' %}">← Back to Contacts</a>
+    
+    <div class="contact-header">
+        <h1>{{ contact.first_name }} {{ contact.last_name }}</h1>
+        <p><strong>Email:</strong> {{ contact.email|default:"Not provided" }}</p>
+        <p><strong>LinkedIn:</strong> 
+            {% if contact.linkedin %}
+                <a href="{{ contact.linkedin }}" target="_blank">{{ contact.linkedin }}</a>
+            {% else %}
+                Not provided
+            {% endif %}
+        </p>
+        <p><strong>Added:</strong> {{ contact.created_at|date:"F d, Y" }}</p>
+        <div style="margin-top: 15px;">
+            <a href="{% url 'edit_contact' contact.id %}" class="btn">✏️ Edit</a>
+            <a href="{% url 'delete_contact' contact.id %}" class="btn" style="background: #f44336;">🗑️ Delete</a>
+        </div>
+    </div>
+    
+    <div class="section">
+        <h2>Phone Numbers</h2>
+        {% if contact.phone_numbers.all %}
+            {% for phone in contact.phone_numbers.all %}
+                <div class="phone-badge">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span>📱 {{ phone.get_phone_type_display }}: {{ phone.number }}</span>
+                        <div>
+                            <a href="{% url 'edit_phone' phone.id %}" style="color: #4CAF50; text-decoration: none; margin-right: 10px;">✏️</a>
+                            <a href="{% url 'delete_phone' phone.id %}" style="color: #f44336; text-decoration: none;">🗑️</a>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        {% else %}
+            <p>No phone numbers added.</p>
+        {% endif %}
+        <a href="{% url 'add_phone' contact.id %}" class="btn">+ Add Phone</a>
+    </div>
+    
+</body>
+</html>

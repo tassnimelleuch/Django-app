@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Delete Phone Number</title>
+    <style>
+        body { font-family: Arial; margin: 40px; max-width: 600px; }
+        .warning { background: #fff3cd; border: 1px solid #ffc107; padding: 15px; border-radius: 4px; margin: 20px 0; }
+        .warning h2 { color: #856404; margin-top: 0; }
+        .btn { padding: 10px 20px; border: none; cursor: pointer; margin-right: 10px; }
+        .btn-delete { background: #f44336; color: white; }
+        .btn-cancel { background: #999; color: white; }
+        .back-link { margin-bottom: 20px; }
+        .back-link a { color: #4CAF50; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="back-link">
+        <a href="{% url 'contact_detail' contact.id %}">← Back to {{ contact.first_name }} {{ contact.last_name }}</a>
+    </div>
+    
+    <h1>🗑️ Delete Phone Number</h1>
+    
+    <div class="warning">
+        <h2>Are you sure?</h2>
+        <p>You are about to permanently delete the phone number:</p>
+        <p><strong>{{ phone.get_phone_type_display }}: {{ phone.number }}</strong></p>
+        <p>This action cannot be undone.</p>
+    </div>
+    
+    <form method="POST">
+        {% csrf_token %}
+        
+        <button type="submit" class="btn btn-delete">Yes, Delete Phone</button>
+        <a href="{% url 'contact_detail' contact.id %}" class="btn btn-cancel">Cancel</a>
+    </form>
+</body>
+</html>

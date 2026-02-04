@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Register</title>
+    <style>
+        body { font-family: Arial; margin: 40px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; }
+        input { padding: 8px; width: 300px; }
+        .error { color: red; font-size: 14px; }
+        .success { color: green; }
+    </style>
+</head>
+<body>
+    <h2>Create Your Account</h2>
+    
+    {% if messages %}
+        {% for message in messages %}
+            <div class="success">{{ message }}</div>
+        {% endfor %}
+    {% endif %}
+    
+    <form method="POST">
+        {% csrf_token %}
+        
+        {% for field in form %}
+        <div class="form-group">
+            {{ field.label_tag }}
+            {{ field }}
+            {% if field.errors %}
+                <div class="error">{{ field.errors }}</div>
+            {% endif %}
+        </div>
+        {% endfor %}
+        
+        <button type="submit" style="padding: 10px 20px;">Register</button>
+    </form>
+    
+    <p style="margin-top: 20px;">
+        Already have an account? <a href="{% url 'login' %}">Login here</a>
+    </p>
+</body>
+</html>

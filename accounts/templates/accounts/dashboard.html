@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Your Dashboard</title>
+    <style>
+        body { font-family: Arial; padding: 20px; }
+        .welcome { color: green; font-size: 24px; }
+        .menu { margin-top: 30px; }
+        .menu a { margin-right: 20px; padding: 10px; background: #4CAF50; color: white; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="welcome">
+        ✅ Welcome, <strong>{{ user.username }}</strong>!
+    </div>
+    
+    
+    
+    <div style="margin-top: 30px; padding: 20px; background: #f5f5f5;">
+        <h3>Your Account Info:</h3>
+        <p><strong>Username:</strong> {{ user.username }}</p>
+        <p><strong>Email:</strong> {{ user.email }}</p>
+        <p><strong>Joined:</strong> {{ user.date_joined|date:"F d, Y" }}</p>
+    </div>
+<div class="menu">
+    <a href="{% url 'contact_list' %}" style="background: #2196F3;">📇 View Contacts</a>
+    <a href="{% url 'add_contact' %}" style="background: #4CAF50;">➕ Add New Contact</a>
+    <a href="{% url 'logout' %}" style="background: #f44336;">Logout</a>
+</div>
+</body>
+</html>

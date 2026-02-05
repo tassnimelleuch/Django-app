@@ -33,6 +33,7 @@
         .form-group { margin-bottom: 15px; }
         label { display: block; margin-bottom: 5px; font-weight: bold; }
         input, select { width: 100%; padding: 8px; box-sizing: border-box; }
+        .required::after { content: " *"; color: red; }
         .section { 
             background: #f9f9f9; 
             padding: 20px; 
@@ -80,12 +81,52 @@
             
             <div class="section">
                 <h3>Basic Information</h3>
-                {{ contact_form.as_p }}
+                <div class="form-group">
+                    <label for="{{ contact_form.first_name.id_for_label }}" class="required">First Name</label>
+                    {{ contact_form.first_name }}
+                    {% if contact_form.first_name.errors %}
+                        <div style="color: red; font-size: 14px;">{{ contact_form.first_name.errors }}</div>
+                    {% endif %}
+                </div>
+                <div class="form-group">
+                    <label for="{{ contact_form.last_name.id_for_label }}" class="required">Last Name</label>
+                    {{ contact_form.last_name }}
+                    {% if contact_form.last_name.errors %}
+                        <div style="color: red; font-size: 14px;">{{ contact_form.last_name.errors }}</div>
+                    {% endif %}
+                </div>
+                <div class="form-group">
+                    <label for="{{ contact_form.email.id_for_label }}">Email</label>
+                    {{ contact_form.email }}
+                    {% if contact_form.email.errors %}
+                        <div style="color: red; font-size: 14px;">{{ contact_form.email.errors }}</div>
+                    {% endif %}
+                </div>
+                <div class="form-group">
+                    <label for="{{ contact_form.linkedin.id_for_label }}">LinkedIn</label>
+                    {{ contact_form.linkedin }}
+                    {% if contact_form.linkedin.errors %}
+                        <div style="color: red; font-size: 14px;">{{ contact_form.linkedin.errors }}</div>
+                    {% endif %}
+                </div>
             </div>
             
             <div class="section">
-                <h3>Phone Number (Optional)</h3>
-                {{ phone_form.as_p }}
+                <h3>Phone Number</h3>
+                <div class="form-group">
+                    <label for="{{ phone_form.phone_type.id_for_label }}" class="required">Phone Type</label>
+                    {{ phone_form.phone_type }}
+                    {% if phone_form.phone_type.errors %}
+                        <div style="color: red; font-size: 14px;">{{ phone_form.phone_type.errors }}</div>
+                    {% endif %}
+                </div>
+                <div class="form-group">
+                    <label for="{{ phone_form.number.id_for_label }}" class="required">Number</label>
+                    {{ phone_form.number }}
+                    {% if phone_form.number.errors %}
+                        <div style="color: red; font-size: 14px;">{{ phone_form.number.errors }}</div>
+                    {% endif %}
+                </div>
             </div>
             
             <div class="button-container">

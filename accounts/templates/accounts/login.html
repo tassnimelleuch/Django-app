@@ -5,14 +5,19 @@
     <style>
         body { font-family: Arial; margin: 40px; }
         .container { max-width: 400px; margin: 0 auto; }
-        input { width: 100%; padding: 10px; margin: 10px 0; }
+        input { 
+            width: 100%; 
+            padding: 10px; 
+            margin: 10px 0; 
+            box-sizing: border-box;
+        }
         button { background: #4CAF50; color: white; padding: 12px; border: none; width: 100%; }
         .error { color: red; background: #ffe6e6; padding: 10px; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h2>🔐 Login to Your Account</h2>
+        <h2>Login to Your Account</h2>
         
         {% if form.errors %}
             <div class="error">

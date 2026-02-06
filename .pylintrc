@@ -1,0 +1,16 @@
+[MASTER]
+load-plugins=pylint_django
+django-settings-module=myproject.settings
+
+[DESIGN]
+max-parents=12  # Increase from default 7
+
+[MESSAGES CONTROL]
+# Disable common Django-related warnings
+disable=too-few-public-methods,
+    imported-auth-user, 
+    invalid-name 
+
+[TYPECHECK]
+# Ignore common Django patterns
+generated-members=objects,DoesNotExist,MultipleObjectsReturned,id

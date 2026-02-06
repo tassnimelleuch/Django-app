@@ -15,8 +15,11 @@ pylint==4.0.4
 pylint-django==2.7.0
 pylint-plugin-utils==0.9.0
 pytest==9.0.2
+pytest-cov==7.0.0
 pytest-django==4.11.1
+python-dotenv==1.2.1
 sqlparse==0.5.5
 tomli==2.4.0
 tomlkit==0.14.0
 typing_extensions==4.15.0
+whitenoise==6.11.0

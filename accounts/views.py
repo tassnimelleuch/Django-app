@@ -7,7 +7,6 @@ from .forms import RegisterForm
 from .models import Contact, PhoneNumber
 from .contact_forms import ContactForm, PhoneNumberForm
 
-
 @login_required
 def dashboard(request):
     """Display the user's dashboard."""

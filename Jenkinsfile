@@ -11,6 +11,9 @@ pipeline {
         PYTHON = sh(script: 'which python3 || which python', returnStdout: true).trim()
         VENV_DIR = 'venv'
         PIP = "${VENV_DIR}/bin/pip"
+        PYTEST = "${VENV_DIR}/bin/pytest"
+        PYLINT = "${VENV_DIR}/bin/pylint"
+        PYLINT_THRESHOLD = '9.00'
     }
     
     stages {
@@ -101,12 +104,72 @@ print('✅ Installation successful!')
                 }
             }
         }
+        
+        stage('Pylint Code Analysis') {
+            steps {
+                script {
+                    echo "🔍 Running Pylint code analysis..."
+                    
+                    // Check if there are Python files to analyze
+                    def pythonFiles = sh(script: 'find . -name "*.py" -type f | head -20', returnStdout: true).trim()
+                    
+                    if (pythonFiles) {
+                        echo "Found Python files to analyze:"
+                        echo pythonFiles
+                        
+                        // Run pylint on specific directories or files
+                        // You can adjust this based on your project structure
+                        try {
+                            // Example: Run pylint on accounts module
+                            def pylintOutput = sh(script: """
+                                ${PYLINT} --exit-zero --output-format=text accounts/ 2>&1 || true
+                            """, returnStdout: true)
+                            
+                            echo "📊 Pylint Output:"
+                            echo pylintOutput
+                            
+                            // Extract score from output (looks like "Your code has been rated at 9.50/10")
+                            def scoreMatch = pylintOutput =~ /Your code has been rated at (\d+\.\d+)\/\d+/
+                            def pylintScore = 0.0
+                            
+                            if (scoreMatch) {
+                                pylintScore = scoreMatch[0][1].toFloat()
+                                echo "📈 Pylint Score: ${pylintScore}/10"
+                                
+                                // Check if score meets threshold
+                                if (pylintScore >= PYLINT_THRESHOLD.toFloat()) {
+                                    echo "✅ Pylint passed! Score (${pylintScore}) >= threshold (${PYLINT_THRESHOLD})"
+                                } else {
+                                    echo "⚠️ Pylint score (${pylintScore}) is below threshold (${PYLINT_THRESHOLD})"
+                                    echo "⚠️ This is a warning, but continuing build..."
+                                    // Uncomment the next line if you want to fail the build on low score
+                                    // error("Pylint score ${pylintScore} is below required threshold ${PYLINT_THRESHOLD}")
+                                }
+                            } else {
+                                echo "⚠️ Could not extract Pylint score from output"
+                                echo "⚠️ Continuing build..."
+                            }
+                            
+                        } catch (Exception e) {
+                            echo "⚠️ Pylint execution failed: ${e.getMessage()}"
+                            echo "⚠️ Continuing build..."
+                        }
+                    } else {
+                        echo "⚠️ No Python files found to analyze with Pylint"
+                    }
+                }
+            }
+        }
     }
     
     post {
         always {
             // Archive any important files if they exist
             archiveArtifacts artifacts: 'requirements.txt, manage.py', allowEmptyArchive: true
+            
+            // Also archive Pylint report if you want
+            sh '${PYLINT} --exit-zero --output-format=json accounts/ > pylint_report.json 2>/dev/null || true'
+            archiveArtifacts artifacts: 'pylint_report.json', allowEmptyArchive: true
             
             // Cleanup virtual environment
             sh 'rm -rf ${VENV_DIR} || true'
@@ -121,9 +184,6 @@ print('✅ Installation successful!')
                 echo "📊 Build Number: ${BUILD_NUMBER}"
                 echo "⏱️ Build Duration: ${currentBuild.durationString}"
                 echo "📝 GitHub triggered this build via webhook"
-                
-                // Send success notification if needed
-                // emailext to: 'your-email@example.com', subject: 'Jenkins Build Success', body: 'Pipeline succeeded!'
             }
         }
         

@@ -4,7 +4,7 @@ pipeline {
     options {
         timeout(time: 30, unit: 'MINUTES')
         retry(1)
-        buildDiscaller(logRotator(numToKeepStr: '10'))
+        buildDiscarder(logRotator(numToKeepStr: '10'))
     }
     
     environment {
@@ -86,76 +86,37 @@ print('✅ Installation successful!')
             }
         }
         
-        stage('Simple Django Check') {
-            steps {
-                script {
-                    sh '''
-                        echo "Running basic Django checks..."
-                        # Check if manage.py exists
-                        if [ -f "manage.py" ]; then
-                            echo "✅ Found manage.py"
-                            ${VENV_DIR}/bin/python manage.py check --settings=myproject.settings || echo "⚠️ Django check failed - might need proper settings"
-                        else
-                            echo "⚠️ manage.py not found in root directory"
-                            echo "Looking for Django project..."
-                            find . -name "manage.py" -type f | head -5
-                        fi
-                    '''
-                }
-            }
-        }
-        
         stage('Pylint Code Analysis') {
             steps {
                 script {
                     echo "🔍 Running Pylint code analysis..."
                     
-                    // Check if there are Python files to analyze
-                    def pythonFiles = sh(script: 'find . -name "*.py" -type f | head -20', returnStdout: true).trim()
-                    
-                    if (pythonFiles) {
-                        echo "Found Python files to analyze:"
-                        echo pythonFiles
+                    try {
+                        def pylintOutput = sh(script: """
+                            ${PYLINT} --exit-zero accounts/ 2>&1
+                        """, returnStdout: true)
                         
-                        // Run pylint on specific directories or files
-                        // You can adjust this based on your project structure
-                        try {
-                            // Example: Run pylint on accounts module
-                            def pylintOutput = sh(script: """
-                                ${PYLINT} --exit-zero --output-format=text accounts/ 2>&1 || true
-                            """, returnStdout: true)
+                        echo "Pylint Output:"
+                        echo pylintOutput
+                        
+                        def scoreMatch = pylintOutput =~ /Your code has been rated at (\d+\.\d+)\/\d+/
+                        def pylintScore = 0.0
+                        
+                        if (scoreMatch) {
+                            pylintScore = scoreMatch[0][1].toFloat()
+                            echo "Pylint Score: ${pylintScore}/10"
                             
-                            echo "📊 Pylint Output:"
-                            echo pylintOutput
-                            
-                            // Extract score from output (looks like "Your code has been rated at 9.50/10")
-                            def scoreMatch = pylintOutput =~ /Your code has been rated at (\d+\.\d+)\/\d+/
-                            def pylintScore = 0.0
-                            
-                            if (scoreMatch) {
-                                pylintScore = scoreMatch[0][1].toFloat()
-                                echo "📈 Pylint Score: ${pylintScore}/10"
-                                
-                                // Check if score meets threshold
-                                if (pylintScore >= PYLINT_THRESHOLD.toFloat()) {
-                                    echo "✅ Pylint passed! Score (${pylintScore}) >= threshold (${PYLINT_THRESHOLD})"
-                                } else {
-                                    echo "⚠️ Pylint score (${pylintScore}) is below threshold (${PYLINT_THRESHOLD})"
-                                    echo "⚠️ This is a warning, but continuing build..."
-                                    // Uncomment the next line if you want to fail the build on low score
-                                    // error("Pylint score ${pylintScore} is below required threshold ${PYLINT_THRESHOLD}")
-                                }
+                            if (pylintScore >= PYLINT_THRESHOLD.toFloat()) {
+                                echo "✅ Pylint passed!"
                             } else {
-                                echo "⚠️ Could not extract Pylint score from output"
-                                echo "⚠️ Continuing build..."
+                                echo "⚠️ Pylint score (${pylintScore}) is below threshold (${PYLINT_THRESHOLD})"
+                                echo "Continuing build..."
                             }
-                            
-                        } catch (Exception e) {
-                            echo "⚠️ Pylint execution failed: ${e.getMessage()}"
-                            echo "⚠️ Continuing build..."
                         }
-                    } else {
-                        echo "⚠️ No Python files found to analyze with Pylint"
+                        
+                    } catch (Exception e) {
+                        echo "⚠️ Pylint execution failed: ${e.getMessage()}"
+                        echo "Continuing build..."
                     }
                 }
             }
@@ -167,37 +128,17 @@ print('✅ Installation successful!')
                     echo "🧪 Running Pytest with coverage..."
                     
                     try {
-                        // Run pytest with coverage on accounts module
                         sh """
-                            ${PYTEST} accounts --cov --cov-report=term --cov-report=html:coverage_html --cov-report=xml:coverage.xml -v
+                            ${PYTEST} accounts --cov --verbose
                         """
                         
-                        echo "✅ Pytest executed successfully"
-                        
-                        // Check if coverage report was generated
-                        if (fileExists('coverage.xml')) {
-                            echo "📊 Coverage report generated: coverage.xml"
-                        }
-                        
-                        if (fileExists('coverage_html')) {
-                            echo "📊 HTML coverage report generated in coverage_html/"
-                        }
+                        echo "✅ Tests executed successfully"
                         
                     } catch (Exception e) {
                         echo "❌ Pytest execution failed: ${e.getMessage()}"
-                        echo "This could be due to:"
-                        echo "1. No tests found in accounts module"
-                        echo "2. Test failures"
-                        echo "3. Missing pytest or coverage in requirements.txt"
-                        
-                        // Check if pytest is installed
-                        def pytestCheck = sh(script: "${PYTEST} --version 2>&1 || echo 'pytest not found'", returnStdout: true).trim()
-                        echo "Pytest check: ${pytestCheck}"
-                        
-                        // You can choose to fail the build or continue with a warning
-                        // Uncomment the next line to fail the build on test failure
-                        // error("Pytest tests failed")
-                        echo "⚠️ Continuing build despite test failures..."
+                        echo "Check if tests exist in the accounts module"
+                        echo "Failing the build due to test failure"
+                        error("Pytest tests failed")
                     }
                 }
             }
@@ -206,59 +147,23 @@ print('✅ Installation successful!')
     
     post {
         always {
-            // Archive any important files if they exist
-            archiveArtifacts artifacts: 'requirements.txt, manage.py', allowEmptyArchive: true
-            
-            // Archive Pylint report if generated
-            sh '${PYLINT} --exit-zero --output-format=json accounts/ > pylint_report.json 2>/dev/null || true'
-            archiveArtifacts artifacts: 'pylint_report.json', allowEmptyArchive: true
-            
-            // Archive test coverage reports
-            archiveArtifacts artifacts: 'coverage.xml, .coverage', allowEmptyArchive: true
-            archiveArtifacts artifacts: 'coverage_html/**', allowEmptyArchive: true
-            
-            // Archive test reports if any (for JUnit format)
-            archiveArtifacts artifacts: 'test-reports/*.xml, reports/*.xml', allowEmptyArchive: true
-            
-            // Cleanup virtual environment
             sh 'rm -rf ${VENV_DIR} || true'
             
             echo "Pipeline execution completed"
         }
         
         success {
-            script {
-                echo "✅✅✅ PIPELINE SUCCESSFUL! ✅✅✅"
-                echo "🎉 Webhook is working perfectly!"
-                echo "📊 Build Number: ${BUILD_NUMBER}"
-                echo "⏱️ Build Duration: ${currentBuild.durationString}"
-                echo "📝 GitHub triggered this build via webhook"
-                
-                // Optional: Publish coverage report if Jenkins has the Coverage plugin
-                // publishCoverage adapters: [coberturaAdapter('coverage.xml')]
-            }
+            echo "✅✅✅ PIPELINE SUCCESSFUL! ✅✅✅"
+            echo "📊 Build Number: ${BUILD_NUMBER}"
         }
         
         failure {
-            script {
-                echo "❌❌❌ PIPELINE FAILED ❌❌❌"
-                echo "Check the console output above for errors"
-                echo "This is likely due to:"
-                echo "1. Missing requirements.txt or Django project structure"
-                echo "2. Pytest test failures (if configured to fail)"
-                echo "3. Other stage failures"
-            }
+            echo "❌❌❌ PIPELINE FAILED ❌❌❌"
+            echo "Check the console output above for errors"
         }
         
         cleanup {
-            script {
-                echo "🧹 Cleaning up temporary files..."
-                sh '''
-                    find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
-                    find . -name "*.pyc" -delete 2>/dev/null || true
-                    echo "Cleanup complete"
-                '''
-            }
+            echo "🧹 Cleaning up..."
         }
     }
 }

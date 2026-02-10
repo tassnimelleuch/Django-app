@@ -11,6 +11,7 @@ pipeline {
         PYTHON = sh(script: 'which python3 || which python', returnStdout: true).trim()
         VENV_DIR = 'venv'
         PIP = "${VENV_DIR}/bin/pip"
+        PYLINT_THRESHOLD = '7.0'  // ADD THIS LINE - you forgot to define it!
     }
     
     stages {
@@ -58,10 +59,13 @@ pipeline {
                             echo "✅ Dependencies installed from requirements.txt"
                         else
                             echo "⚠️ requirements.txt not found"
-                            echo "Installing Django only..."
-                            ${PIP} install django
-                            echo "✅ Django installed"
+                            echo "Installing Django and Pylint..."  // CHANGED THIS LINE
+                            ${PIP} install django pylint
+                            echo "✅ Django and Pylint installed"
                         fi
+                        
+                        # Always ensure pylint is installed
+                        ${PIP} install pylint || echo "Pylint installation failed"
                     '''
                 }
             }
@@ -71,13 +75,13 @@ pipeline {
             steps {
                 script {
                     sh '''
-                        echo "Verifying Django installation..."
+                        echo "Verifying installations..."
                         ${VENV_DIR}/bin/python -c "
 import django
 print('✅ Django version:', django.__version__)
-print('✅ Django path:', django.__path__)
-print('✅ Installation successful!')
                         "
+                        
+                        ${VENV_DIR}/bin/pylint --version || echo "⚠️ Pylint not available"
                     '''
                 }
             }
@@ -101,8 +105,8 @@ print('✅ Installation successful!')
                 }
             }
         }
-    }
-        stage('Run Pylint Analysis') {
+        
+        stage('Run Pylint Analysis') {  // THIS STAGE WAS ADDED
             steps {
                 script {
                     echo "Running Pylint code quality analysis..."
@@ -112,56 +116,66 @@ print('✅ Installation successful!')
                         # Create reports directory
                         mkdir -p reports
                         
-                        # Run pylint on accounts directory with JSON output
+                        # Run pylint on accounts directory
                         echo "Running Pylint on accounts/ directory..."
-                        ${VENV_DIR}/bin/pylint accounts/ \
-                            --output-format=json:reports/pylint-report.json \
-                            --exit-zero || echo "Pylint found issues"
                         
-                        # Also run with text output for console visibility
-                        echo "=== PYLINT ANALYSIS RESULTS ==="
-                        ${VENV_DIR}/bin/pylint accounts/ \
-                            --output-format=colorized \
-                            --exit-zero > reports/pylint-output.txt || true
+                        # First run to check if accounts/ exists
+                        if [ -d "accounts" ]; then
+                            echo "Found accounts/ directory"
+                            ${VENV_DIR}/bin/pylint accounts/ --output-format=colorized > reports/pylint-output.txt 2>&1 || true
+                        else
+                            echo "⚠️ accounts/ directory not found, checking for Python files..."
+                            find . -name "*.py" -type f | head -10
+                            echo "Running pylint on all Python files..."
+                            ${VENV_DIR}/bin/pylint $(find . -name "*.py" -type f) --output-format=colorized > reports/pylint-output.txt 2>&1 || true
+                        fi
                         
-                        # Calculate score from JSON output
-                        if [ -f "reports/pylint-report.json" ]; then
-                            echo "Pylint JSON report generated"
-                            # Extract score (requires jq tool)
-                            if command -v jq >/dev/null 2>&1; then
-                                SCORE=$(jq '.[] | .score' reports/pylint-report.json | head -1)
-                                echo "Pylint Score: ${SCORE}/10"
-                                
-                                # Save score to file for pipeline use
-                                echo "PYLINT_SCORE=${SCORE}" > pylint-score.env
-                                
-                                # Check against threshold
+                        # Show summary
+                        echo ""
+                        echo "=== PYLINT SUMMARY ==="
+                        grep -E "(Your code has been rated|^\*|^---)" reports/pylint-output.txt || echo "No summary available"
+                        
+                        # Extract score if possible
+                        SCORE_LINE=$(grep "Your code has been rated" reports/pylint-output.txt || echo "")
+                        if [[ ! -z "$SCORE_LINE" ]]; then
+                            SCORE=$(echo "$SCORE_LINE" | grep -oE "[0-9]+\.[0-9]+" | head -1)
+                            echo "Pylint Score: ${SCORE:-N/A}/10"
+                            
+                            # Check against threshold if score exists
+                            if [[ ! -z "$SCORE" ]]; then
                                 THRESHOLD=${PYLINT_THRESHOLD}
-                                if (( $(echo "$SCORE < $THRESHOLD" | bc -l) )); then
+                                if (( $(echo "$SCORE < $THRESHOLD" | bc -l 2>/dev/null) )); then
                                     echo "❌ Pylint score ${SCORE} is below threshold ${THRESHOLD}"
                                     exit 1
                                 else
                                     echo "✅ Pylint score ${SCORE} meets threshold ${THRESHOLD}"
                                 fi
-                            else
-                                echo "⚠️ jq not installed, skipping score calculation"
                             fi
-                        else
-                            echo "⚠️ Pylint JSON report not generated"
                         fi
-                        
-                        # Display summary
+                    '''
+                }
+            }
+            
+            post {
+                always {
+                    // Archive pylint reports
+                    archiveArtifacts artifacts: 'reports/*.txt', allowEmptyArchive: true
+                    
+                    // Display pylint output in console
+                    sh '''
                         echo ""
-                        echo "=== PYLINT SUMMARY ==="
-                        cat reports/pylint-output.txt | grep -E "(Your code has been rated|^\*|^---)" || true
+                        echo "=== PYLINT OUTPUT (last 50 lines) ==="
+                        tail -50 reports/pylint-output.txt || echo "No pylint output available"
                     '''
                 }
             }
         }
+    }  // ← THIS CLOSING BRACE WAS MISSING! It closes the 'stages' section
+    
     post {
         always {
             // Archive any important files if they exist
-            archiveArtifacts artifacts: 'requirements.txt, manage.py', allowEmptyArchive: true
+            archiveArtifacts artifacts: 'requirements.txt, manage.py, reports/**', allowEmptyArchive: true
             
             // Cleanup virtual environment
             sh 'rm -rf ${VENV_DIR} || true'
@@ -176,9 +190,6 @@ print('✅ Installation successful!')
                 echo "📊 Build Number: ${BUILD_NUMBER}"
                 echo "⏱️ Build Duration: ${currentBuild.durationString}"
                 echo "📝 GitHub triggered this build via webhook"
-                
-                // Send success notification if needed
-                // emailext to: 'your-email@example.com', subject: 'Jenkins Build Success', body: 'Pipeline succeeded!'
             }
         }
         
@@ -186,7 +197,10 @@ print('✅ Installation successful!')
             script {
                 echo "❌❌❌ PIPELINE FAILED ❌❌❌"
                 echo "Check the console output above for errors"
-                echo "This is likely due to missing requirements.txt or Django project structure"
+                echo "Possible causes:"
+                echo "1. Missing requirements.txt"
+                echo "2. Django project structure issues"
+                echo "3. Pylint score below ${PYLINT_THRESHOLD}/10"
             }
         }
         

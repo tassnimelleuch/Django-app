@@ -173,7 +173,7 @@ print('✅ Django initialized successfully')
                 }
             }
         }
-    
+    }
     post {
         always {
             // Archive reports

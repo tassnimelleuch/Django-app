@@ -28,7 +28,7 @@
             <p>📧 {{ contact.email|default:"No email" }}</p>
             <p>🔗 {{ contact.linkedin|default:"No LinkedIn" }}</p>
             <p>📅 Added: {{ contact.created_at|date:"M d, Y" }}</p>
-            <a href="{% url 'contact_detail' contact.id %}">View Details →</a>
+            <a href="{% url 'contact_detail' contact.id %}">Details →</a>
         </div>
         {% endfor %}
     {% else %}

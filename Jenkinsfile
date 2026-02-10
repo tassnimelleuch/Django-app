@@ -158,22 +158,25 @@ print('✅ Django initialized successfully')
         stage('Quality Gate Check') {
             steps {
                 script {
-                    echo "⏳ Waiting for SonarQube processing..."
+                    echo "🔍 Checking SonarQube Quality Gate (will FAIL pipeline if quality is bad)..."
                     
-                    // Wait a bit for background processing
-                    sleep 30
-                    
-                    // Then check Quality Gate
                     timeout(time: 5, unit: 'MINUTES') {
-                        waitForQualityGate abortPipeline: false  // Don't abort, just warn
+                        def qg = waitForQualityGate abortPipeline: false
+                        
+                        if (qg.status == 'OK') {
+                            echo "✅ Quality Gate PASSED"
+                        } else {
+                            echo "❌❌❌ CRITICAL: Quality Gate FAILED! ❌❌❌"
+                            echo "Status: ${qg.status}"
+                            echo "URL: http://localhost:9000/dashboard?id=django-app-${BUILD_NUMBER}"
+                            
+                            // THIS WILL FAIL THE PIPELINE
+                            error("SonarQube Quality Gate failed: ${qg.status}. Fix code quality issues!")
+                        }
                     }
-                    
-                    echo "✅ Pipeline complete!"
-                    echo "📊 View full report at: http://localhost:9000/dashboard?id=django-app-${BUILD_NUMBER}"
                 }
             }
-        }
-    }
+        } }
     post {
         always {
             // Archive reports

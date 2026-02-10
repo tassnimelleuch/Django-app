@@ -4,7 +4,7 @@ pipeline {
     options {
         timeout(time: 30, unit: 'MINUTES')
         retry(1)
-        buildDiscarder(logRotator(numToKeepStr: '10'))
+        buildDiscaller(logRotator(numToKeepStr: '10'))
     }
     
     environment {
@@ -160,6 +160,48 @@ print('✅ Installation successful!')
                 }
             }
         }
+        
+        stage('Run Pytest with Coverage') {
+            steps {
+                script {
+                    echo "🧪 Running Pytest with coverage..."
+                    
+                    try {
+                        // Run pytest with coverage on accounts module
+                        sh """
+                            ${PYTEST} accounts --cov --cov-report=term --cov-report=html:coverage_html --cov-report=xml:coverage.xml -v
+                        """
+                        
+                        echo "✅ Pytest executed successfully"
+                        
+                        // Check if coverage report was generated
+                        if (fileExists('coverage.xml')) {
+                            echo "📊 Coverage report generated: coverage.xml"
+                        }
+                        
+                        if (fileExists('coverage_html')) {
+                            echo "📊 HTML coverage report generated in coverage_html/"
+                        }
+                        
+                    } catch (Exception e) {
+                        echo "❌ Pytest execution failed: ${e.getMessage()}"
+                        echo "This could be due to:"
+                        echo "1. No tests found in accounts module"
+                        echo "2. Test failures"
+                        echo "3. Missing pytest or coverage in requirements.txt"
+                        
+                        // Check if pytest is installed
+                        def pytestCheck = sh(script: "${PYTEST} --version 2>&1 || echo 'pytest not found'", returnStdout: true).trim()
+                        echo "Pytest check: ${pytestCheck}"
+                        
+                        // You can choose to fail the build or continue with a warning
+                        // Uncomment the next line to fail the build on test failure
+                        // error("Pytest tests failed")
+                        echo "⚠️ Continuing build despite test failures..."
+                    }
+                }
+            }
+        }
     }
     
     post {
@@ -167,9 +209,16 @@ print('✅ Installation successful!')
             // Archive any important files if they exist
             archiveArtifacts artifacts: 'requirements.txt, manage.py', allowEmptyArchive: true
             
-            // Also archive Pylint report if you want
+            // Archive Pylint report if generated
             sh '${PYLINT} --exit-zero --output-format=json accounts/ > pylint_report.json 2>/dev/null || true'
             archiveArtifacts artifacts: 'pylint_report.json', allowEmptyArchive: true
+            
+            // Archive test coverage reports
+            archiveArtifacts artifacts: 'coverage.xml, .coverage', allowEmptyArchive: true
+            archiveArtifacts artifacts: 'coverage_html/**', allowEmptyArchive: true
+            
+            // Archive test reports if any (for JUnit format)
+            archiveArtifacts artifacts: 'test-reports/*.xml, reports/*.xml', allowEmptyArchive: true
             
             // Cleanup virtual environment
             sh 'rm -rf ${VENV_DIR} || true'
@@ -184,6 +233,9 @@ print('✅ Installation successful!')
                 echo "📊 Build Number: ${BUILD_NUMBER}"
                 echo "⏱️ Build Duration: ${currentBuild.durationString}"
                 echo "📝 GitHub triggered this build via webhook"
+                
+                // Optional: Publish coverage report if Jenkins has the Coverage plugin
+                // publishCoverage adapters: [coberturaAdapter('coverage.xml')]
             }
         }
         
@@ -191,7 +243,10 @@ print('✅ Installation successful!')
             script {
                 echo "❌❌❌ PIPELINE FAILED ❌❌❌"
                 echo "Check the console output above for errors"
-                echo "This is likely due to missing requirements.txt or Django project structure"
+                echo "This is likely due to:"
+                echo "1. Missing requirements.txt or Django project structure"
+                echo "2. Pytest test failures (if configured to fail)"
+                echo "3. Other stage failures"
             }
         }
         

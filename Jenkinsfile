@@ -27,6 +27,37 @@ pipeline {
             }
         }
         
+        stage('Check/Install SonarScanner') {
+            steps {
+                script {
+                    echo "🔧 Checking SonarScanner installation..."
+                    
+                    sh '''
+                        # Check if sonar-scanner is already installed
+                        if command -v sonar-scanner &> /dev/null; then
+                            echo "✅ SonarScanner already installed globally"
+                            sonar-scanner --version
+                        else
+                            echo "📦 Installing SonarScanner globally..."
+                            
+                            # Method 1: Install from official binaries
+                            wget -q https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip
+                            unzip -q sonar-scanner-cli-*.zip
+                            rm sonar-scanner-cli-*.zip
+                            
+                            # Add to PATH for current session
+                            export SONAR_SCANNER_HOME=$(pwd)/sonar-scanner-5.0.1.3006-linux
+                            export PATH=$PATH:$SONAR_SCANNER_HOME/bin
+                            
+                            # Test it
+                            $SONAR_SCANNER_HOME/bin/sonar-scanner --version
+                            echo "✅ SonarScanner installed in workspace"
+                        fi
+                    '''
+                }
+            }
+        }
+        
         stage('Create Virtual Environment') {
             steps {
                 script {
@@ -39,7 +70,7 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 script {
-                    echo "📦 Installing ALL dependencies including SonarScanner..."
+                    echo "📦 Installing Python dependencies..."
                     
                     sh '''
                         echo "Installing/upgrading pip..."
@@ -54,17 +85,6 @@ pipeline {
                             ${PIP} install django pytest pytest-django pytest-cov pylint
                             echo "✅ Basic packages installed"
                         fi
-                        
-                        # INSTALL SONARSCANNER VIA PIP - ONE TIME
-                        echo "Installing sonar-scanner-cli via pip..."
-                        ${PIP} install sonar-scanner-cli
-                        
-                        # Verify installation
-                        echo "Verifying sonar-scanner installation..."
-                        ${VENV_DIR}/bin/sonar-scanner --version || echo "Checking alternative..."
-                        
-                        # Alternative check
-                        python -c "import sonar_scanner; print('✅ sonar-scanner-cli installed')" 2>/dev/null || echo "SonarScanner available via pip"
                     '''
                 }
             }
@@ -128,48 +148,45 @@ print('✅ Django initialized successfully')
                 script {
                     echo "📊 Running SonarQube analysis..."
                     
-                    // First, check SonarScanner is available
+                    // Find sonar-scanner path
                     sh '''
-                        echo "Checking sonar-scanner availability..."
-                        which sonar-scanner || ${VENV_DIR}/bin/sonar-scanner --help || echo "Trying pip package..."
-                        python -c "import sonar_scanner; print('sonar_scanner module available')" 2>/dev/null || true
+                        # Find sonar-scanner
+                        if command -v sonar-scanner &> /dev/null; then
+                            echo "Using global sonar-scanner"
+                            SONAR_SCANNER_CMD="sonar-scanner"
+                        elif [ -d "sonar-scanner-5.0.1.3006-linux" ]; then
+                            echo "Using workspace sonar-scanner"
+                            SONAR_SCANNER_CMD="$(pwd)/sonar-scanner-5.0.1.3006-linux/bin/sonar-scanner"
+                        else
+                            echo "ERROR: sonar-scanner not found!"
+                            exit 1
+                        fi
+                        echo "SonarScanner command: $SONAR_SCANNER_CMD"
                     '''
                     
                     withSonarQubeEnv('sonarqube') {
-                        // TRY 1: Use pip-installed sonar-scanner
                         sh '''
-                            # Method 1: Use the pip-installed version
-                            echo "Method 1: Using pip sonar-scanner..."
-                            ${VENV_DIR}/bin/sonar-scanner --version 2>/dev/null || echo "Not found in venv"
+                            # Determine which sonar-scanner to use
+                            if command -v sonar-scanner &> /dev/null; then
+                                SCANNER="sonar-scanner"
+                            elif [ -d "sonar-scanner-5.0.1.3006-linux" ]; then
+                                SCANNER="$(pwd)/sonar-scanner-5.0.1.3006-linux/bin/sonar-scanner"
+                            else
+                                echo "ERROR: No sonar-scanner found!"
+                                exit 1
+                            fi
                             
-                            # Method 2: Use sonar_scanner Python module
-                            echo "Method 2: Using sonar_scanner Python module..."
-                            python -c "
-try:
-    from sonar_scanner import SonarScanner
-    scanner = SonarScanner()
-    print('✅ SonarScanner Python module available')
-except Exception as e:
-    print(f'Python module error: {e}')
-                            " 2>/dev/null || true
-                        '''
-                        
-                        // ACTUAL SONAR ANALYSIS
-                        sh """
-                            # Use the FULL PATH to sonar-scanner from venv
-                            ${VENV_DIR}/bin/sonar-scanner \
+                            $SCANNER \
                                 -Dsonar.projectKey=django-app-${BUILD_NUMBER} \
-                                -Dsonar.projectName="Django Contact App" \
+                                -Dsonar.projectName="Django Contact App #${BUILD_NUMBER}" \
                                 -Dsonar.sources=. \
                                 -Dsonar.exclusions=**/migrations/**,**/__pycache__/**,**/*.pyc,venv/**,**/test*.py \
                                 -Dsonar.python.coverage.reportPaths=coverage.xml \
                                 -Dsonar.python.xunit.reportPath=junit-results.xml \
                                 -Dsonar.python.pylint.reportPath=pylint-report.json \
                                 -Dsonar.python.version=3 \
-                                -Dsonar.sourceEncoding=UTF-8 \
-                                -Dsonar.host.url=\${SONAR_HOST_URL} \
-                                -Dsonar.login=\${SONAR_AUTH_TOKEN}
-                        """
+                                -Dsonar.sourceEncoding=UTF-8
+                        '''
                     }
                 }
             }
@@ -181,7 +198,6 @@ except Exception as e:
                     echo "⏳ Waiting for SonarQube Quality Gate..."
                     
                     timeout(time: 5, unit: 'MINUTES') {
-                        // THIS WILL RUN - NO REMOVAL
                         waitForQualityGate abortPipeline: true
                     }
                 }
@@ -194,20 +210,22 @@ except Exception as e:
             // Archive reports
             archiveArtifacts artifacts: 'coverage.xml, junit-results.xml, pylint-report.json', allowEmptyArchive: true
             
-            // Cleanup
-            sh 'rm -rf ${VENV_DIR} || true'
-            sh 'rm -f coverage.xml junit-results.xml pylint-report.json || true'
+            // Cleanup - keep sonar-scanner for next runs
+            sh '''
+                rm -rf ${VENV_DIR} || true
+                rm -f coverage.xml junit-results.xml pylint-report.json || true
+                # Keep sonar-scanner directory for future runs
+            '''
             echo "Pipeline execution completed"
         }
         
         success {
             echo "✅✅✅ PIPELINE SUCCESSFUL! ✅✅✅"
-            echo "📊 SonarQube report available"
+            echo "📊 SonarQube report: http://localhost:9000/dashboard?id=django-app-${BUILD_NUMBER}"
         }
         
         failure {
             echo "❌❌❌ PIPELINE FAILED ❌❌❌"
-            echo "Check SonarQube at: http://localhost:9000"
         }
     }
 }

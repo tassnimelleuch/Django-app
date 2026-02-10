@@ -9,6 +9,10 @@ pipeline {
     environment {
         VENV_DIR = 'venv'
         PYLINT_THRESHOLD = '9.0'
+        PYTHON = ''
+        PIP = ''
+        PYTEST = ''
+        PYLINT = ''
     }
 
     stages {
@@ -25,11 +29,14 @@ pipeline {
         stage('Setup Python') {
             steps {
                 script {
-                    env.PYTHON = sh(script: 'which python3 || which python', returnStdout: true).trim()
+                    env.PYTHON = sh(script: 'which python3', returnStdout: true).trim()
+                    if (!env.PYTHON) {
+                        env.PYTHON = sh(script: 'which python', returnStdout: true).trim()
+                    }
                     echo "Using Python: ${env.PYTHON}"
                     sh """
-                        ${PYTHON} --version
-                        ${PYTHON} -m pip --version || echo 'pip not available globally'
+                        ${env.PYTHON} --version
+                        ${env.PYTHON} -m pip --version || echo 'pip not available globally'
                     """
                 }
             }
@@ -40,7 +47,7 @@ pipeline {
                 script {
                     sh """
                         set -e
-                        ${PYTHON} -m venv ${VENV_DIR}
+                        ${env.PYTHON} -m venv ${env.VENV_DIR}
                     """
                     env.PIP = "${env.VENV_DIR}/bin/pip"
                     env.PYTEST = "${env.VENV_DIR}/bin/pytest"
@@ -55,18 +62,18 @@ pipeline {
                 script {
                     sh """
                         set -e
-                        ${PIP} install --upgrade pip setuptools wheel
+                        ${env.PIP} install --upgrade pip setuptools wheel
 
                         if [ -f requirements.txt ]; then
                             echo 'Installing project requirements...'
-                            ${PIP} install -r requirements.txt
+                            ${env.PIP} install -r requirements.txt
                         else
                             echo 'requirements.txt not found, installing baseline dependencies'
-                            ${PIP} install django pytest pytest-cov pytest-html pylint pylint-django
+                            ${env.PIP} install django pytest pytest-cov pytest-html pylint pylint-django
                         fi
 
                         # Ensure test and lint tooling are always available
-                        ${PIP} install --upgrade pytest pytest-cov pytest-html pylint pylint-django coverage
+                        ${env.PIP} install --upgrade pytest pytest-cov pytest-html pylint pylint-django coverage
                     """
                 }
             }
@@ -77,49 +84,50 @@ pipeline {
                 stage('Static Analysis - PyLint') {
                     steps {
                         script {
+                            // Determine target directory
+                            def targetDir = 'accounts'
                             sh """
-                                set -e
+                                if [ ! -d "${targetDir}" ]; then
+                                    echo "accounts/ directory not found, using repository root"
+                                    targetDir='.'
+                                fi
+                                echo "PyLint target directory: \${targetDir}"
+                            """
+                            
+                            sh """
+                                set +e
                                 mkdir -p reports
 
-                                TARGET='accounts'
-                                if [ ! -d "$TARGET" ]; then
-                                    echo "accounts/ directory not found, using repository root"
-                                    TARGET='.'
-                                fi
-
                                 echo 'Generating JSON PyLint report...'
-                                ${PYLINT} "$TARGET" --load-plugins=pylint_django \
+                                ${env.PYLINT} "\${targetDir}" --load-plugins=pylint_django \
                                     --django-settings-module=myproject.settings \
-                                    --output-format=json > pylint-report.json || true
+                                    --output-format=json > pylint-report.json 2>&1
 
                                 echo 'Generating readable PyLint output...'
-                                ${PYLINT} "$TARGET" --load-plugins=pylint_django \
+                                ${env.PYLINT} "\${targetDir}" --load-plugins=pylint_django \
                                     --django-settings-module=myproject.settings \
-                                    --output-format=text > pylint-output.txt || true
-
-                                python - <<'EOF'
-import os
-import pathlib
-import re
-import sys
-
-output = pathlib.Path('pylint-output.txt')
-if not output.exists():
-    print('PyLint output missing; failing stage.')
-    sys.exit(1)
-
-text = output.read_text(encoding='utf-8', errors='ignore')
-match = re.search(r"Your code has been rated at ([0-9.]+)/10", text)
-if not match:
-    print('Could not determine PyLint score; failing stage.')
-    sys.exit(1)
-
-score = float(match.group(1))
-threshold = float(os.environ.get('PYLINT_THRESHOLD', '9.0'))
-print(f'PyLint score: {score}/10 (threshold {threshold})')
-if score < threshold:
-    sys.exit(1)
-EOF
+                                    --output-format=text > pylint-output.txt 2>&1
+                                
+                                # Check PyLint score
+                                PY_SCORE=\$(grep -o "Your code has been rated at [0-9.]\\+/10" pylint-output.txt | grep -o "[0-9.]\\+")
+                                if [ -z "\$PY_SCORE" ]; then
+                                    echo "ERROR: Could not extract PyLint score"
+                                    echo "PyLint output:"
+                                    cat pylint-output.txt
+                                    exit 1
+                                fi
+                                
+                                echo "PyLint score: \$PY_SCORE/10"
+                                THRESHOLD=${env.PYLINT_THRESHOLD}
+                                
+                                # Compare scores
+                                if python3 -c "import sys; sys.exit(0 if float('$PY_SCORE') >= float('$THRESHOLD') else 1)"; then
+                                    echo "PyLint score meets threshold of \$THRESHOLD"
+                                    exit 0
+                                else
+                                    echo "ERROR: PyLint score (\$PY_SCORE) below threshold (\$THRESHOLD)"
+                                    exit 1
+                                fi
                             """
                         }
                     }
@@ -135,30 +143,65 @@ EOF
                     steps {
                         script {
                             sh """
-                                set -e
+                                set +e
                                 TARGETS=''
+                                
+                                # Check for various test locations
                                 if [ -d 'tests' ]; then
-                                    TARGETS="$TARGETS tests"
+                                    TARGETS="\${TARGETS} tests"
                                 fi
+                                
                                 if [ -d 'accounts/tests' ]; then
-                                    TARGETS="$TARGETS accounts/tests"
+                                    TARGETS="\${TARGETS} accounts/tests"
                                 fi
+                                
                                 if [ -f 'test_health.py' ]; then
-                                    TARGETS="$TARGETS test_health.py"
+                                    TARGETS="\${TARGETS} test_health.py"
                                 fi
-                                if [ -z "$TARGETS" ]; then
-                                    TARGETS='accounts'
+                                
+                                if [ -z "\${TARGETS}" ]; then
+                                    TARGETS='.'
                                 fi
-
-                                echo "Running pytest on:$TARGETS"
-                                ${PYTEST} $TARGETS \
-                                    --cov=accounts \
+                                
+                                echo "Running pytest on: \${TARGETS}"
+                                
+                                ${env.PYTEST} \${TARGETS} \
+                                    --cov=. \
                                     --cov-report=xml:coverage.xml \
                                     --cov-report=html:htmlcov \
                                     --junitxml=junit.xml \
                                     --html=pytest-report.html \
                                     -v
+                                
+                                # Capture pytest exit code but don't fail yet
+                                PYTEST_EXIT=\$?
+                                
+                                # Generate JUnit and coverage reports even if tests fail
+                                echo "Pytest completed with exit code: \$PYTEST_EXIT"
+                                
+                                # Create a simple test summary
+                                echo "Test Execution Summary" > test-summary.txt
+                                echo "=====================" >> test-summary.txt
+                                date >> test-summary.txt
+                                echo "" >> test-summary.txt
+                                
+                                if [ -f junit.xml ]; then
+                                    echo "Test results saved to junit.xml" >> test-summary.txt
+                                fi
+                                
+                                if [ -f coverage.xml ]; then
+                                    echo "Coverage report saved to coverage.xml" >> test-summary.txt
+                                fi
+                                
+                                # Exit with pytest's exit code
+                                exit \$PYTEST_EXIT
                             """
+                        }
+                    }
+                    
+                    post {
+                        always {
+                            archiveArtifacts artifacts: 'junit.xml, coverage.xml, pytest-report.html, htmlcov/**, test-summary.txt', allowEmptyArchive: true
                         }
                     }
                 }
@@ -169,25 +212,17 @@ EOF
             steps {
                 script {
                     sh """
-                        set -e
-                        echo 'Test Execution Summary' > test-summary.txt
-                        echo '=====================' >> test-summary.txt
-                        date >> test-summary.txt
-                        echo '' >> test-summary.txt
-
-                        if [ -f junit.xml ]; then
-                            echo 'JUnit Report: junit.xml' >> test-summary.txt
-                        fi
-                        if [ -f coverage.xml ]; then
-                            echo 'Coverage Report: coverage.xml' >> test-summary.txt
-                        fi
-                        if [ -f pytest-report.html ]; then
-                            echo 'Pytest HTML Report: pytest-report.html' >> test-summary.txt
-                        fi
+                        echo 'Finalizing reports...'
                         if [ -f pylint-output.txt ]; then
                             echo '' >> test-summary.txt
-                            echo 'Recent PyLint summary:' >> test-summary.txt
-                            tail -n 5 pylint-output.txt >> test-summary.txt
+                            echo 'PyLint Summary:' >> test-summary.txt
+                            tail -n 10 pylint-output.txt >> test-summary.txt
+                        fi
+                        
+                        if [ -f coverage.xml ]; then
+                            echo '' >> test-summary.txt
+                            echo 'Coverage Summary:' >> test-summary.txt
+                            grep -o 'line-rate="[0-9.]*"' coverage.xml | head -1 >> test-summary.txt
                         fi
                     """
                 }
@@ -198,68 +233,61 @@ EOF
     post {
         always {
             script {
-                if (fileExists('junit.xml')) {
-                    junit 'junit.xml'
-                } else {
-                    echo 'JUnit report not found; skipping test result publication'
-                }
-
+                // Archive all reports
+                archiveArtifacts artifacts: 'junit.xml, coverage.xml, pylint-report.json, pylint-output.txt, test-summary.txt, pytest-report.html, htmlcov/**', allowEmptyArchive: true
+                
+                // Publish HTML reports if they exist
                 if (fileExists('htmlcov/index.html')) {
                     publishHTML(target: [
                         reportDir: 'htmlcov',
                         reportFiles: 'index.html',
-                        reportName: 'Test Coverage Report',
+                        reportName: 'Coverage Report',
                         keepAll: true
                     ])
                 } else {
                     echo 'Coverage HTML report missing; skipping publish'
                 }
-
+                
                 if (fileExists('pytest-report.html')) {
                     publishHTML(target: [
                         reportDir: '.',
                         reportFiles: 'pytest-report.html',
-                        reportName: 'Pytest Detailed Report',
+                        reportName: 'Pytest Report',
                         keepAll: true
                     ])
                 } else {
                     echo 'Pytest HTML report missing; skipping publish'
                 }
-            }
-
-            archiveArtifacts artifacts: 'junit.xml, coverage.xml, pylint-report.json, pylint-output.txt, test-summary.txt, pytest-report.html, htmlcov/**', allowEmptyArchive: true
-            sh 'rm -rf ${VENV_DIR} || true'
-        }
-
-        success {
-            script {
-                echo 'Pipeline succeeded! ✅'
-                echo "Coverage report: ${BUILD_URL}Coverage_20Report/"
-                echo "Detailed pytest report: ${BUILD_URL}Pytest_20Detailed_20Report/"
-            }
-        }
-
-        unstable {
-            script {
-                echo 'Pipeline completed with test failures! ⚠️'
-                echo "Check the Test Results tab for build ${BUILD_NUMBER}"
-            }
-        }
-
-        failure {
-            script {
-                echo 'Pipeline failed! ❌'
-                echo 'Inspect the console output for root causes.'
-            }
-        }
-
-        cleanup {
-            script {
-                echo 'Cleaning up workspace artifacts...'
+                
+                // Cleanup
+                sh 'rm -rf ${env.VENV_DIR} || true'
                 sh '''
                     find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
                     find . -name "*.pyc" -delete 2>/dev/null || true
                 '''
+            }
+        }
+        
+        success {
+            script {
+                echo 'Pipeline succeeded! ✅'
+                echo "Coverage report: ${BUILD_URL}Coverage_20Report/"
+                echo "Detailed pytest report: ${BUILD_URL}Pytest_20Report/"
+            }
+        }
+        
+        failure {
+            script {
+                echo 'Pipeline failed! ❌'
+                echo 'Inspect the console output for root causes.'
+                echo "Build URL: ${BUILD_URL}"
+            }
+        }
+        
+        unstable {
+            script {
+                echo 'Pipeline completed with test failures! ⚠️'
+                echo "Check the Test Results tab for build ${BUILD_NUMBER}"
             }
         }
     }

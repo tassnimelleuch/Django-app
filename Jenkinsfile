@@ -157,7 +157,7 @@ print('✅ Installation successful!')
                     '''
                 }
             }
-        
+        }
     post {
         always {
             // Archive any important files if they exist

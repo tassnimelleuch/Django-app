@@ -114,34 +114,45 @@ print('✅ Django initialized successfully')
             }
         }
         
+        stage('Install SonarScanner') {
+            steps {
+                script {
+                    echo "📦 Installing SonarScanner..."
+                    sh '''
+                        # Download SonarScanner if not present
+                        if [ ! -d "sonar-scanner" ]; then
+                            wget -q https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip
+                            unzip -q sonar-scanner-cli-*.zip
+                            rm sonar-scanner-cli-*.zip
+                            mv sonar-scanner-* sonar-scanner
+                            echo "✅ SonarScanner installed"
+                        else
+                            echo "✅ SonarScanner already installed"
+                        fi
+                    '''
+                }
+            }
+        }
+        
         stage('SonarQube Analysis') {
             steps {
                 script {
                     echo "📊 Running SonarQube analysis..."
                     
-                    // Generate coverage report for SonarQube
-                    sh """
-                        export DJANGO_SETTINGS_MODULE=${DJANGO_SETTINGS_MODULE}
-                        export SECRET_KEY='${SECRET_KEY}'
-                        ${PYTEST} accounts --cov --cov-report=xml:coverage.xml --junitxml=junit-results.xml
-                    """
-                    
-                    // Run SonarScanner
-                    withSonarQubeEnv('sonarqube') {  // Use the name from Jenkins config
-                        sh """
-                            sonar-scanner \
-                                -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
-                                -Dsonar.projectName='${SONAR_PROJECT_NAME}' \
+                    withSonarQubeEnv('sonarqube') {
+                        sh '''
+                            # Use the downloaded scanner
+                            ./sonar-scanner/bin/sonar-scanner \
+                                -Dsonar.projectKey=django-app \
+                                -Dsonar.projectName="Django Contact App" \
                                 -Dsonar.sources=. \
                                 -Dsonar.exclusions=**/migrations/**,**/__pycache__/**,**/*.pyc,venv/**,**/test*.py \
                                 -Dsonar.python.coverage.reportPaths=coverage.xml \
                                 -Dsonar.python.xunit.reportPath=junit-results.xml \
                                 -Dsonar.python.pylint.reportPath=pylint-report.json \
                                 -Dsonar.python.version=3 \
-                                -Dsonar.sourceEncoding=UTF-8 \
-                                -Dsonar.host.url=${SONAR_HOST_URL} \
-                                -Dsonar.login=${SONAR_AUTH_TOKEN}
-                        """
+                                -Dsonar.sourceEncoding=UTF-8
+                        '''
                     }
                 }
             }
@@ -165,6 +176,7 @@ print('✅ Django initialized successfully')
             sh '''
                 rm -rf ${VENV_DIR} || true
                 rm -f coverage.xml junit-results.xml pylint-report.json || true
+                rm -rf sonar-scanner || true
             '''
             echo "Pipeline execution completed"
         }

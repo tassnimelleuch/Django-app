@@ -14,6 +14,7 @@ pipeline {
         PYTEST = "${VENV_DIR}/bin/pytest"
         PYLINT = "${VENV_DIR}/bin/pylint"
         PYLINT_THRESHOLD = '9.00'
+        DJANGO_SETTINGS_MODULE = 'myproject.settings'
     }
     
     stages {
@@ -22,20 +23,6 @@ pipeline {
                 cleanWs()
                 checkout scm
                 echo "✅ Workspace cleaned and code checked out"
-                echo "Branch: ${env.BRANCH_NAME}"
-                echo "Commit: ${env.GIT_COMMIT}"
-            }
-        }
-        
-        stage('Setup Python') {
-            steps {
-                script {
-                    echo "Using Python: ${PYTHON}"
-                    sh '''
-                        ${PYTHON} --version
-                        ${PYTHON} -m pip --version || echo "pip not available, will install in venv"
-                    '''
-                }
             }
         }
         
@@ -43,7 +30,7 @@ pipeline {
             steps {
                 script {
                     echo 'Creating virtual environment...'
-                    sh '${PYTHON} -m venv ${VENV_DIR} || echo "Virtual environment creation failed, continuing..."'
+                    sh '${PYTHON} -m venv ${VENV_DIR}'
                 }
             }
         }
@@ -53,71 +40,35 @@ pipeline {
                 script {
                     sh '''
                         echo "Installing/upgrading pip..."
-                        ${PIP} install --upgrade pip setuptools wheel || echo "Pip upgrade failed, continuing..."
+                        ${PIP} install --upgrade pip setuptools wheel
                         
                         if [ -f requirements.txt ]; then
                             echo "Installing from requirements.txt..."
                             ${PIP} install -r requirements.txt
-                            echo "✅ Dependencies installed from requirements.txt"
+                            echo "✅ Dependencies installed"
                         else
-                            echo "⚠️ requirements.txt not found"
-                            echo "Installing Django only..."
-                            ${PIP} install django
-                            echo "✅ Django installed"
+                            echo "Installing Django and test tools..."
+                            ${PIP} install django pytest pytest-django pytest-cov pylint
+                            echo "✅ Basic packages installed"
                         fi
                     '''
                 }
             }
         }
         
-        stage('Verify Installation') {
+        stage('Initialize Django') {
             steps {
                 script {
+                    echo "🔧 Initializing Django..."
                     sh '''
-                        echo "Verifying Django installation..."
                         ${VENV_DIR}/bin/python -c "
+import os
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'myproject.settings')
 import django
-print('✅ Django version:', django.__version__)
-print('✅ Django path:', django.__path__)
-print('✅ Installation successful!')
+django.setup()
+print('✅ Django initialized successfully')
                         "
                     '''
-                }
-            }
-        }
-        
-        stage('Pylint Code Analysis') {
-            steps {
-                script {
-                    echo "🔍 Running Pylint code analysis..."
-                    
-                    try {
-                        def pylintOutput = sh(script: """
-                            ${PYLINT} --exit-zero accounts/ 2>&1
-                        """, returnStdout: true)
-                        
-                        echo "Pylint Output:"
-                        echo pylintOutput
-                        
-                        def scoreMatch = pylintOutput =~ /Your code has been rated at (\d+\.\d+)\/\d+/
-                        def pylintScore = 0.0
-                        
-                        if (scoreMatch) {
-                            pylintScore = scoreMatch[0][1].toFloat()
-                            echo "Pylint Score: ${pylintScore}/10"
-                            
-                            if (pylintScore >= PYLINT_THRESHOLD.toFloat()) {
-                                echo "✅ Pylint passed!"
-                            } else {
-                                echo "⚠️ Pylint score (${pylintScore}) is below threshold (${PYLINT_THRESHOLD})"
-                                echo "Continuing build..."
-                            }
-                        }
-                        
-                    } catch (Exception e) {
-                        echo "⚠️ Pylint execution failed: ${e.getMessage()}"
-                        echo "Continuing build..."
-                    }
                 }
             }
         }
@@ -127,19 +78,25 @@ print('✅ Installation successful!')
                 script {
                     echo "🧪 Running Pytest with coverage..."
                     
-                    try {
-                        sh """
-                            ${PYTEST} accounts --cov
-                        """
-                        
-                        echo "✅ Tests executed successfully"
-                        
-                    } catch (Exception e) {
-                        echo "❌ Pytest execution failed: ${e.getMessage()}"
-                        echo "Check if tests exist in the accounts module"
-                        echo "Failing the build due to test failure"
-                        error("Pytest tests failed")
-                    }
+                    sh """
+                        DJANGO_SETTINGS_MODULE=${DJANGO_SETTINGS_MODULE} \
+                        ${PYTEST} accounts \
+                            --cov \
+                            --cov-report=term \
+                            --ds=myproject.settings \
+                            --tb=short  # Shorter traceback for cleaner output
+                    """
+                }
+            }
+        }
+        
+        stage('Pylint Code Analysis') {
+            steps {
+                script {
+                    echo "🔍 Running Pylint..."
+                    sh """
+                        ${PYLINT} accounts --fail-under=${PYLINT_THRESHOLD} || echo "⚠️ Pylint score below threshold, continuing..."
+                    """
                 }
             }
         }
@@ -147,23 +104,17 @@ print('✅ Installation successful!')
     
     post {
         always {
+            // Cleanup
             sh 'rm -rf ${VENV_DIR} || true'
-            
             echo "Pipeline execution completed"
         }
         
         success {
             echo "✅✅✅ PIPELINE SUCCESSFUL! ✅✅✅"
-            echo "📊 Build Number: ${BUILD_NUMBER}"
         }
         
         failure {
             echo "❌❌❌ PIPELINE FAILED ❌❌❌"
-            echo "Check the console output above for errors"
-        }
-        
-        cleanup {
-            echo "🧹 Cleaning up..."
         }
     }
 }

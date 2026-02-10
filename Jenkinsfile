@@ -3,14 +3,11 @@ pipeline {
     
     options {
         timeout(time: 30, unit: 'MINUTES')
-        retry(1)
         buildDiscarder(logRotator(numToKeepStr: '10'))
     }
     
     environment {
-        PYTHON = sh(script: 'which python3 || which python', returnStdout: true).trim()
         VENV_DIR = 'venv'
-        PIP = "${VENV_DIR}/bin/pip"
         PYLINT_THRESHOLD = '7.0'
     }
     
@@ -28,7 +25,8 @@ pipeline {
         stage('Setup Python') {
             steps {
                 script {
-                    echo "Using Python: ${PYTHON}"
+                    env.PYTHON = sh(script: 'which python3 || which python', returnStdout: true).trim()
+                    echo "Using Python: ${env.PYTHON}"
                     sh '''
                         ${PYTHON} --version
                         ${PYTHON} -m pip --version || echo "pip not available, will install in venv"
@@ -42,6 +40,7 @@ pipeline {
                 script {
                     echo 'Creating virtual environment...'
                     sh '${PYTHON} -m venv ${VENV_DIR} || echo "Virtual environment creation failed, continuing..."'
+                    env.PIP = "${env.VENV_DIR}/bin/pip"
                 }
             }
         }

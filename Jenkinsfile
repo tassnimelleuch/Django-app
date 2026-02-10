@@ -11,7 +11,7 @@ pipeline {
         PYTHON = sh(script: 'which python3 || which python', returnStdout: true).trim()
         VENV_DIR = 'venv'
         PIP = "${VENV_DIR}/bin/pip"
-        PYLINT_THRESHOLD = '7.0'  // ADD THIS LINE - you forgot to define it!
+        PYLINT_THRESHOLD = '7.0'
     }
     
     stages {
@@ -59,7 +59,7 @@ pipeline {
                             echo "✅ Dependencies installed from requirements.txt"
                         else
                             echo "⚠️ requirements.txt not found"
-                            echo "Installing Django and Pylint..."  // CHANGED THIS LINE
+                            echo "Installing Django and Pylint..."
                             ${PIP} install django pylint
                             echo "✅ Django and Pylint installed"
                         fi
@@ -106,7 +106,7 @@ print('✅ Django version:', django.__version__)
             }
         }
         
-        stage('Run Pylint Analysis') {  // THIS STAGE WAS ADDED
+        stage('Run Pylint Analysis') {
             steps {
                 script {
                     echo "Running Pylint code quality analysis..."
@@ -133,7 +133,7 @@ print('✅ Django version:', django.__version__)
                         # Show summary
                         echo ""
                         echo "=== PYLINT SUMMARY ==="
-                        grep -E "(Your code has been rated|^\*|^---)" reports/pylint-output.txt || echo "No summary available"
+                        grep -E "(Your code has been rated|^\\*|^---)" reports/pylint-output.txt || echo "No summary available"
                         
                         # Extract score if possible
                         SCORE_LINE=$(grep "Your code has been rated" reports/pylint-output.txt || echo "")
@@ -170,7 +170,7 @@ print('✅ Django version:', django.__version__)
                 }
             }
         }
-    }  // ← THIS CLOSING BRACE WAS MISSING! It closes the 'stages' section
+    }
     
     post {
         always {

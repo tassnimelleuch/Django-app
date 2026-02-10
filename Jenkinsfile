@@ -15,6 +15,8 @@ pipeline {
         PYLINT = "${VENV_DIR}/bin/pylint"
         PYLINT_THRESHOLD = '9.00'
         DJANGO_SETTINGS_MODULE = 'myproject.settings'
+        // Generate a test-only SECRET_KEY
+        SECRET_KEY = sh(script: 'python3 -c "import secrets; print(secrets.token_urlsafe(50))"', returnStdout: true).trim()
     }
     
     stages {
@@ -59,14 +61,18 @@ pipeline {
         stage('Initialize Django') {
             steps {
                 script {
-                    echo "🔧 Initializing Django..."
+                    echo "🔧 Initializing Django with test SECRET_KEY..."
                     sh '''
+                        # Set the SECRET_KEY before Django setup
                         ${VENV_DIR}/bin/python -c "
 import os
+os.environ['SECRET_KEY'] = '${SECRET_KEY}'
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'myproject.settings')
 import django
 django.setup()
+from django.conf import settings
 print('✅ Django initialized successfully')
+print(f'✅ Using SECRET_KEY: {settings.SECRET_KEY[:10]}...')
                         "
                     '''
                 }
@@ -79,12 +85,15 @@ print('✅ Django initialized successfully')
                     echo "🧪 Running Pytest with coverage..."
                     
                     sh """
-                        DJANGO_SETTINGS_MODULE=${DJANGO_SETTINGS_MODULE} \
+                        # Must export BOTH environment variables
+                        export DJANGO_SETTINGS_MODULE=${DJANGO_SETTINGS_MODULE}
+                        export SECRET_KEY='${SECRET_KEY}'
+                        
                         ${PYTEST} accounts \
                             --cov \
                             --cov-report=term \
                             --ds=myproject.settings \
-                            --tb=short  # Shorter traceback for cleaner output
+                            --tb=short
                     """
                 }
             }

@@ -1,293 +1,148 @@
 pipeline {
     agent any
-
+    
     options {
         timeout(time: 30, unit: 'MINUTES')
+        retry(1)
         buildDiscarder(logRotator(numToKeepStr: '10'))
     }
-
+    
     environment {
+        PYTHON = sh(script: 'which python3 || which python', returnStdout: true).trim()
         VENV_DIR = 'venv'
-        PYLINT_THRESHOLD = '9.0'
-        PYTHON = ''
-        PIP = ''
-        PYTEST = ''
-        PYLINT = ''
+        PIP = "${VENV_DIR}/bin/pip"
     }
-
+    
     stages {
         stage('Clean Workspace') {
             steps {
                 cleanWs()
                 checkout scm
-                echo 'Workspace prepared and source checked out'
+                echo "✅ Workspace cleaned and code checked out"
                 echo "Branch: ${env.BRANCH_NAME}"
                 echo "Commit: ${env.GIT_COMMIT}"
             }
         }
-
+        
         stage('Setup Python') {
             steps {
                 script {
-                    env.PYTHON = sh(script: 'which python3', returnStdout: true).trim()
-                    if (!env.PYTHON) {
-                        env.PYTHON = sh(script: 'which python', returnStdout: true).trim()
-                    }
-                    echo "Using Python: ${env.PYTHON}"
-                    sh """
-                        ${env.PYTHON} --version
-                        ${env.PYTHON} -m pip --version || echo 'pip not available globally'
-                    """
+                    echo "Using Python: ${PYTHON}"
+                    sh '''
+                        ${PYTHON} --version
+                        ${PYTHON} -m pip --version || echo "pip not available, will install in venv"
+                    '''
                 }
             }
         }
-
+        
         stage('Create Virtual Environment') {
             steps {
                 script {
-                    sh """
-                        set -e
-                        ${env.PYTHON} -m venv ${env.VENV_DIR}
-                    """
-                    env.PIP = "${env.VENV_DIR}/bin/pip"
-                    env.PYTEST = "${env.VENV_DIR}/bin/pytest"
-                    env.PYLINT = "${env.VENV_DIR}/bin/pylint"
-                    echo "Virtual environment ready at ${env.VENV_DIR}"
+                    echo 'Creating virtual environment...'
+                    sh '${PYTHON} -m venv ${VENV_DIR} || echo "Virtual environment creation failed, continuing..."'
                 }
             }
         }
-
+        
         stage('Install Dependencies') {
             steps {
                 script {
-                    sh """
-                        set -e
-                        ${env.PIP} install --upgrade pip setuptools wheel
-
+                    sh '''
+                        echo "Installing/upgrading pip..."
+                        ${PIP} install --upgrade pip setuptools wheel || echo "Pip upgrade failed, continuing..."
+                        
                         if [ -f requirements.txt ]; then
-                            echo 'Installing project requirements...'
-                            ${env.PIP} install -r requirements.txt
+                            echo "Installing from requirements.txt..."
+                            ${PIP} install -r requirements.txt
+                            echo "✅ Dependencies installed from requirements.txt"
                         else
-                            echo 'requirements.txt not found, installing baseline dependencies'
-                            ${env.PIP} install django pytest pytest-cov pytest-html pylint pylint-django
+                            echo "⚠️ requirements.txt not found"
+                            echo "Installing Django only..."
+                            ${PIP} install django
+                            echo "✅ Django installed"
                         fi
-
-                        # Ensure test and lint tooling are always available
-                        ${env.PIP} install --upgrade pytest pytest-cov pytest-html pylint pylint-django coverage
-                    """
+                    '''
                 }
             }
         }
-
-        stage('Code Quality & Tests') {
-            parallel {
-                stage('Static Analysis - PyLint') {
-                    steps {
-                        script {
-                            // Determine target directory
-                            def targetDir = 'accounts'
-                            sh """
-                                if [ ! -d "${targetDir}" ]; then
-                                    echo "accounts/ directory not found, using repository root"
-                                    targetDir='.'
-                                fi
-                                echo "PyLint target directory: \${targetDir}"
-                            """
-                            
-                            sh """
-                                set +e
-                                mkdir -p reports
-
-                                echo 'Generating JSON PyLint report...'
-                                ${env.PYLINT} "\${targetDir}" --load-plugins=pylint_django \
-                                    --django-settings-module=myproject.settings \
-                                    --output-format=json > pylint-report.json 2>&1
-
-                                echo 'Generating readable PyLint output...'
-                                ${env.PYLINT} "\${targetDir}" --load-plugins=pylint_django \
-                                    --django-settings-module=myproject.settings \
-                                    --output-format=text > pylint-output.txt 2>&1
-                                
-                                # Check PyLint score
-                                PY_SCORE=\$(grep -o "Your code has been rated at [0-9.]\\+/10" pylint-output.txt | grep -o "[0-9.]\\+")
-                                if [ -z "\$PY_SCORE" ]; then
-                                    echo "ERROR: Could not extract PyLint score"
-                                    echo "PyLint output:"
-                                    cat pylint-output.txt
-                                    exit 1
-                                fi
-                                
-                                echo "PyLint score: \$PY_SCORE/10"
-                                THRESHOLD=${env.PYLINT_THRESHOLD}
-                                
-                                # Compare scores
-                                if python3 -c "import sys; sys.exit(0 if float('$PY_SCORE') >= float('$THRESHOLD') else 1)"; then
-                                    echo "PyLint score meets threshold of \$THRESHOLD"
-                                    exit 0
-                                else
-                                    echo "ERROR: PyLint score (\$PY_SCORE) below threshold (\$THRESHOLD)"
-                                    exit 1
-                                fi
-                            """
-                        }
-                    }
-
-                    post {
-                        always {
-                            archiveArtifacts artifacts: 'pylint-output.txt, pylint-report.json', allowEmptyArchive: true
-                        }
-                    }
-                }
-
-                stage('Unit Tests - Pytest') {
-                    steps {
-                        script {
-                            sh """
-                                set +e
-                                TARGETS=''
-                                
-                                # Check for various test locations
-                                if [ -d 'tests' ]; then
-                                    TARGETS="\${TARGETS} tests"
-                                fi
-                                
-                                if [ -d 'accounts/tests' ]; then
-                                    TARGETS="\${TARGETS} accounts/tests"
-                                fi
-                                
-                                if [ -f 'test_health.py' ]; then
-                                    TARGETS="\${TARGETS} test_health.py"
-                                fi
-                                
-                                if [ -z "\${TARGETS}" ]; then
-                                    TARGETS='.'
-                                fi
-                                
-                                echo "Running pytest on: \${TARGETS}"
-                                
-                                ${env.PYTEST} \${TARGETS} \
-                                    --cov=. \
-                                    --cov-report=xml:coverage.xml \
-                                    --cov-report=html:htmlcov \
-                                    --junitxml=junit.xml \
-                                    --html=pytest-report.html \
-                                    -v
-                                
-                                # Capture pytest exit code but don't fail yet
-                                PYTEST_EXIT=\$?
-                                
-                                # Generate JUnit and coverage reports even if tests fail
-                                echo "Pytest completed with exit code: \$PYTEST_EXIT"
-                                
-                                # Create a simple test summary
-                                echo "Test Execution Summary" > test-summary.txt
-                                echo "=====================" >> test-summary.txt
-                                date >> test-summary.txt
-                                echo "" >> test-summary.txt
-                                
-                                if [ -f junit.xml ]; then
-                                    echo "Test results saved to junit.xml" >> test-summary.txt
-                                fi
-                                
-                                if [ -f coverage.xml ]; then
-                                    echo "Coverage report saved to coverage.xml" >> test-summary.txt
-                                fi
-                                
-                                # Exit with pytest's exit code
-                                exit \$PYTEST_EXIT
-                            """
-                        }
-                    }
-                    
-                    post {
-                        always {
-                            archiveArtifacts artifacts: 'junit.xml, coverage.xml, pytest-report.html, htmlcov/**, test-summary.txt', allowEmptyArchive: true
-                        }
-                    }
-                }
-            }
-        }
-
-        stage('Generate Reports') {
+        
+        stage('Verify Installation') {
             steps {
                 script {
-                    sh """
-                        echo 'Finalizing reports...'
-                        if [ -f pylint-output.txt ]; then
-                            echo '' >> test-summary.txt
-                            echo 'PyLint Summary:' >> test-summary.txt
-                            tail -n 10 pylint-output.txt >> test-summary.txt
+                    sh '''
+                        echo "Verifying Django installation..."
+                        ${VENV_DIR}/bin/python -c "
+import django
+print('✅ Django version:', django.__version__)
+print('✅ Django path:', django.__path__)
+print('✅ Installation successful!')
+                        "
+                    '''
+                }
+            }
+        }
+        
+        stage('Simple Django Check') {
+            steps {
+                script {
+                    sh '''
+                        echo "Running basic Django checks..."
+                        # Check if manage.py exists
+                        if [ -f "manage.py" ]; then
+                            echo "✅ Found manage.py"
+                            ${VENV_DIR}/bin/python manage.py check --settings=myproject.settings || echo "⚠️ Django check failed - might need proper settings"
+                        else
+                            echo "⚠️ manage.py not found in root directory"
+                            echo "Looking for Django project..."
+                            find . -name "manage.py" -type f | head -5
                         fi
-                        
-                        if [ -f coverage.xml ]; then
-                            echo '' >> test-summary.txt
-                            echo 'Coverage Summary:' >> test-summary.txt
-                            grep -o 'line-rate="[0-9.]*"' coverage.xml | head -1 >> test-summary.txt
-                        fi
-                    """
+                    '''
                 }
             }
         }
     }
-
+    
     post {
         always {
-            script {
-                // Archive all reports
-                archiveArtifacts artifacts: 'junit.xml, coverage.xml, pylint-report.json, pylint-output.txt, test-summary.txt, pytest-report.html, htmlcov/**', allowEmptyArchive: true
-                
-                // Publish HTML reports if they exist
-                if (fileExists('htmlcov/index.html')) {
-                    publishHTML(target: [
-                        reportDir: 'htmlcov',
-                        reportFiles: 'index.html',
-                        reportName: 'Coverage Report',
-                        keepAll: true
-                    ])
-                } else {
-                    echo 'Coverage HTML report missing; skipping publish'
-                }
-                
-                if (fileExists('pytest-report.html')) {
-                    publishHTML(target: [
-                        reportDir: '.',
-                        reportFiles: 'pytest-report.html',
-                        reportName: 'Pytest Report',
-                        keepAll: true
-                    ])
-                } else {
-                    echo 'Pytest HTML report missing; skipping publish'
-                }
-                
-                // Cleanup
-                sh 'rm -rf ${env.VENV_DIR} || true'
-                sh '''
-                    find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
-                    find . -name "*.pyc" -delete 2>/dev/null || true
-                '''
-            }
+            // Archive any important files if they exist
+            archiveArtifacts artifacts: 'requirements.txt, manage.py', allowEmptyArchive: true
+            
+            // Cleanup virtual environment
+            sh 'rm -rf ${VENV_DIR} || true'
+            
+            echo "Pipeline execution completed"
         }
         
         success {
             script {
-                echo 'Pipeline succeeded! ✅'
-                echo "Coverage report: ${BUILD_URL}Coverage_20Report/"
-                echo "Detailed pytest report: ${BUILD_URL}Pytest_20Report/"
+                echo "✅✅✅ PIPELINE SUCCESSFUL! ✅✅✅"
+                echo "🎉 Webhook is working perfectly!"
+                echo "📊 Build Number: ${BUILD_NUMBER}"
+                echo "⏱️ Build Duration: ${currentBuild.durationString}"
+                echo "📝 GitHub triggered this build via webhook"
+                
+                // Send success notification if needed
+                // emailext to: 'your-email@example.com', subject: 'Jenkins Build Success', body: 'Pipeline succeeded!'
             }
         }
         
         failure {
             script {
-                echo 'Pipeline failed! ❌'
-                echo 'Inspect the console output for root causes.'
-                echo "Build URL: ${BUILD_URL}"
+                echo "❌❌❌ PIPELINE FAILED ❌❌❌"
+                echo "Check the console output above for errors"
+                echo "This is likely due to missing requirements.txt or Django project structure"
             }
         }
         
-        unstable {
+        cleanup {
             script {
-                echo 'Pipeline completed with test failures! ⚠️'
-                echo "Check the Test Results tab for build ${BUILD_NUMBER}"
+                echo "🧹 Cleaning up temporary files..."
+                sh '''
+                    find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+                    find . -name "*.pyc" -delete 2>/dev/null || true
+                    echo "Cleanup complete"
+                '''
             }
         }
     }

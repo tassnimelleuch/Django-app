@@ -1,215 +1,264 @@
 pipeline {
     agent any
-    
+
     options {
         timeout(time: 30, unit: 'MINUTES')
         buildDiscarder(logRotator(numToKeepStr: '10'))
     }
-    
+
     environment {
         VENV_DIR = 'venv'
-        PYLINT_THRESHOLD = '7.0'
+        PYLINT_THRESHOLD = '9.0'
     }
-    
+
     stages {
         stage('Clean Workspace') {
             steps {
                 cleanWs()
                 checkout scm
-                echo "✅ Workspace cleaned and code checked out"
+                echo 'Workspace prepared and source checked out'
                 echo "Branch: ${env.BRANCH_NAME}"
                 echo "Commit: ${env.GIT_COMMIT}"
             }
         }
-        
+
         stage('Setup Python') {
             steps {
                 script {
                     env.PYTHON = sh(script: 'which python3 || which python', returnStdout: true).trim()
                     echo "Using Python: ${env.PYTHON}"
-                    sh '''
+                    sh """
                         ${PYTHON} --version
-                        ${PYTHON} -m pip --version || echo "pip not available, will install in venv"
-                    '''
+                        ${PYTHON} -m pip --version || echo 'pip not available globally'
+                    """
                 }
             }
         }
-        
+
         stage('Create Virtual Environment') {
             steps {
                 script {
-                    echo 'Creating virtual environment...'
-                    sh '${PYTHON} -m venv ${VENV_DIR} || echo "Virtual environment creation failed, continuing..."'
+                    sh """
+                        set -e
+                        ${PYTHON} -m venv ${VENV_DIR}
+                    """
                     env.PIP = "${env.VENV_DIR}/bin/pip"
+                    env.PYTEST = "${env.VENV_DIR}/bin/pytest"
+                    env.PYLINT = "${env.VENV_DIR}/bin/pylint"
+                    echo "Virtual environment ready at ${env.VENV_DIR}"
                 }
             }
         }
-        
+
         stage('Install Dependencies') {
             steps {
                 script {
-                    sh '''
-                        echo "Installing/upgrading pip..."
-                        ${PIP} install --upgrade pip setuptools wheel || echo "Pip upgrade failed, continuing..."
-                        
+                    sh """
+                        set -e
+                        ${PIP} install --upgrade pip setuptools wheel
+
                         if [ -f requirements.txt ]; then
-                            echo "Installing from requirements.txt..."
+                            echo 'Installing project requirements...'
                             ${PIP} install -r requirements.txt
-                            echo "✅ Dependencies installed from requirements.txt"
                         else
-                            echo "⚠️ requirements.txt not found"
-                            echo "Installing Django and Pylint..."
-                            ${PIP} install django pylint
-                            echo "✅ Django and Pylint installed"
+                            echo 'requirements.txt not found, installing baseline dependencies'
+                            ${PIP} install django pytest pytest-cov pytest-html pylint pylint-django
                         fi
-                        
-                        # Always ensure pylint is installed
-                        ${PIP} install pylint || echo "Pylint installation failed"
-                    '''
+
+                        # Ensure test and lint tooling are always available
+                        ${PIP} install --upgrade pytest pytest-cov pytest-html pylint pylint-django coverage
+                    """
                 }
             }
         }
-        
-        stage('Verify Installation') {
-            steps {
-                script {
-                    sh '''
-                        echo "Verifying installations..."
-                        ${VENV_DIR}/bin/python -c "
-import django
-print('✅ Django version:', django.__version__)
-                        "
-                        
-                        ${VENV_DIR}/bin/pylint --version || echo "⚠️ Pylint not available"
-                    '''
-                }
-            }
-        }
-        
-        stage('Simple Django Check') {
-            steps {
-                script {
-                    sh '''
-                        echo "Running basic Django checks..."
-                        # Check if manage.py exists
-                        if [ -f "manage.py" ]; then
-                            echo "✅ Found manage.py"
-                            ${VENV_DIR}/bin/python manage.py check --settings=myproject.settings || echo "⚠️ Django check failed - might need proper settings"
-                        else
-                            echo "⚠️ manage.py not found in root directory"
-                            echo "Looking for Django project..."
-                            find . -name "manage.py" -type f | head -5
-                        fi
-                    '''
-                }
-            }
-        }
-        
-        stage('Run Pylint Analysis') {
-            steps {
-                script {
-                    echo "Running Pylint code quality analysis..."
-                    echo "Minimum score to pass: ${PYLINT_THRESHOLD}/10"
-                    
-                    sh '''
-                        # Create reports directory
-                        mkdir -p reports
-                        
-                        # Run pylint on accounts directory
-                        echo "Running Pylint on accounts/ directory..."
-                        
-                        # First run to check if accounts/ exists
-                        if [ -d "accounts" ]; then
-                            echo "Found accounts/ directory"
-                            ${VENV_DIR}/bin/pylint accounts/ --output-format=colorized > reports/pylint-output.txt 2>&1 || true
-                        else
-                            echo "⚠️ accounts/ directory not found, checking for Python files..."
-                            find . -name "*.py" -type f | head -10
-                            echo "Running pylint on all Python files..."
-                            ${VENV_DIR}/bin/pylint $(find . -name "*.py" -type f) --output-format=colorized > reports/pylint-output.txt 2>&1 || true
-                        fi
-                        
-                        # Show summary
-                        echo ""
-                        echo "=== PYLINT SUMMARY ==="
-                        grep -E "(Your code has been rated|^\\*|^---)" reports/pylint-output.txt || echo "No summary available"
-                        
-                        # Extract score if possible
-                        SCORE_LINE=$(grep "Your code has been rated" reports/pylint-output.txt || echo "")
-                        if [[ ! -z "$SCORE_LINE" ]]; then
-                            SCORE=$(echo "$SCORE_LINE" | grep -oE "[0-9]+\.[0-9]+" | head -1)
-                            echo "Pylint Score: ${SCORE:-N/A}/10"
-                            
-                            # Check against threshold if score exists
-                            if [[ ! -z "$SCORE" ]]; then
-                                THRESHOLD=${PYLINT_THRESHOLD}
-                                if (( $(echo "$SCORE < $THRESHOLD" | bc -l 2>/dev/null) )); then
-                                    echo "❌ Pylint score ${SCORE} is below threshold ${THRESHOLD}"
-                                    exit 1
-                                else
-                                    echo "✅ Pylint score ${SCORE} meets threshold ${THRESHOLD}"
+
+        stage('Code Quality & Tests') {
+            parallel {
+                stage('Static Analysis - PyLint') {
+                    steps {
+                        script {
+                            sh """
+                                set -e
+                                mkdir -p reports
+
+                                TARGET='accounts'
+                                if [ ! -d "$TARGET" ]; then
+                                    echo "accounts/ directory not found, using repository root"
+                                    TARGET='.'
                                 fi
-                            fi
-                        fi
-                    '''
+
+                                echo 'Generating JSON PyLint report...'
+                                ${PYLINT} "$TARGET" --load-plugins=pylint_django \
+                                    --django-settings-module=myproject.settings \
+                                    --output-format=json > pylint-report.json || true
+
+                                echo 'Generating readable PyLint output...'
+                                ${PYLINT} "$TARGET" --load-plugins=pylint_django \
+                                    --django-settings-module=myproject.settings \
+                                    --output-format=text > pylint-output.txt || true
+
+                                python - <<'EOF'
+import os
+import pathlib
+import re
+import sys
+
+output = pathlib.Path('pylint-output.txt')
+if not output.exists():
+    print('PyLint output missing; failing stage.')
+    sys.exit(1)
+
+text = output.read_text(encoding='utf-8', errors='ignore')
+match = re.search(r"Your code has been rated at ([0-9.]+)/10", text)
+if not match:
+    print('Could not determine PyLint score; failing stage.')
+    sys.exit(1)
+
+score = float(match.group(1))
+threshold = float(os.environ.get('PYLINT_THRESHOLD', '9.0'))
+print(f'PyLint score: {score}/10 (threshold {threshold})')
+if score < threshold:
+    sys.exit(1)
+EOF
+                            """
+                        }
+                    }
+
+                    post {
+                        always {
+                            archiveArtifacts artifacts: 'pylint-output.txt, pylint-report.json', allowEmptyArchive: true
+                        }
+                    }
+                }
+
+                stage('Unit Tests - Pytest') {
+                    steps {
+                        script {
+                            sh """
+                                set -e
+                                TARGETS=''
+                                if [ -d 'tests' ]; then
+                                    TARGETS="$TARGETS tests"
+                                fi
+                                if [ -d 'accounts/tests' ]; then
+                                    TARGETS="$TARGETS accounts/tests"
+                                fi
+                                if [ -f 'test_health.py' ]; then
+                                    TARGETS="$TARGETS test_health.py"
+                                fi
+                                if [ -z "$TARGETS" ]; then
+                                    TARGETS='accounts'
+                                fi
+
+                                echo "Running pytest on:$TARGETS"
+                                ${PYTEST} $TARGETS \
+                                    --cov=accounts \
+                                    --cov-report=xml:coverage.xml \
+                                    --cov-report=html:htmlcov \
+                                    --junitxml=junit.xml \
+                                    --html=pytest-report.html \
+                                    -v
+                            """
+                        }
+                    }
                 }
             }
-            
-            post {
-                always {
-                    // Archive pylint reports
-                    archiveArtifacts artifacts: 'reports/*.txt', allowEmptyArchive: true
-                    
-                    // Display pylint output in console
-                    sh '''
-                        echo ""
-                        echo "=== PYLINT OUTPUT (last 50 lines) ==="
-                        tail -50 reports/pylint-output.txt || echo "No pylint output available"
-                    '''
+        }
+
+        stage('Generate Reports') {
+            steps {
+                script {
+                    sh """
+                        set -e
+                        echo 'Test Execution Summary' > test-summary.txt
+                        echo '=====================' >> test-summary.txt
+                        date >> test-summary.txt
+                        echo '' >> test-summary.txt
+
+                        if [ -f junit.xml ]; then
+                            echo 'JUnit Report: junit.xml' >> test-summary.txt
+                        fi
+                        if [ -f coverage.xml ]; then
+                            echo 'Coverage Report: coverage.xml' >> test-summary.txt
+                        fi
+                        if [ -f pytest-report.html ]; then
+                            echo 'Pytest HTML Report: pytest-report.html' >> test-summary.txt
+                        fi
+                        if [ -f pylint-output.txt ]; then
+                            echo '' >> test-summary.txt
+                            echo 'Recent PyLint summary:' >> test-summary.txt
+                            tail -n 5 pylint-output.txt >> test-summary.txt
+                        fi
+                    """
                 }
             }
         }
     }
-    
+
     post {
         always {
-            // Archive any important files if they exist
-            archiveArtifacts artifacts: 'requirements.txt, manage.py, reports/**', allowEmptyArchive: true
-            
-            // Cleanup virtual environment
+            script {
+                if (fileExists('junit.xml')) {
+                    junit 'junit.xml'
+                } else {
+                    echo 'JUnit report not found; skipping test result publication'
+                }
+
+                if (fileExists('htmlcov/index.html')) {
+                    publishHTML(target: [
+                        reportDir: 'htmlcov',
+                        reportFiles: 'index.html',
+                        reportName: 'Test Coverage Report',
+                        keepAll: true
+                    ])
+                } else {
+                    echo 'Coverage HTML report missing; skipping publish'
+                }
+
+                if (fileExists('pytest-report.html')) {
+                    publishHTML(target: [
+                        reportDir: '.',
+                        reportFiles: 'pytest-report.html',
+                        reportName: 'Pytest Detailed Report',
+                        keepAll: true
+                    ])
+                } else {
+                    echo 'Pytest HTML report missing; skipping publish'
+                }
+            }
+
+            archiveArtifacts artifacts: 'junit.xml, coverage.xml, pylint-report.json, pylint-output.txt, test-summary.txt, pytest-report.html, htmlcov/**', allowEmptyArchive: true
             sh 'rm -rf ${VENV_DIR} || true'
-            
-            echo "Pipeline execution completed"
         }
-        
+
         success {
             script {
-                echo "✅✅✅ PIPELINE SUCCESSFUL! ✅✅✅"
-                echo "🎉 Webhook is working perfectly!"
-                echo "📊 Build Number: ${BUILD_NUMBER}"
-                echo "⏱️ Build Duration: ${currentBuild.durationString}"
-                echo "📝 GitHub triggered this build via webhook"
+                echo 'Pipeline succeeded! ✅'
+                echo "Coverage report: ${BUILD_URL}Coverage_20Report/"
+                echo "Detailed pytest report: ${BUILD_URL}Pytest_20Detailed_20Report/"
             }
         }
-        
+
+        unstable {
+            script {
+                echo 'Pipeline completed with test failures! ⚠️'
+                echo "Check the Test Results tab for build ${BUILD_NUMBER}"
+            }
+        }
+
         failure {
             script {
-                echo "❌❌❌ PIPELINE FAILED ❌❌❌"
-                echo "Check the console output above for errors"
-                echo "Possible causes:"
-                echo "1. Missing requirements.txt"
-                echo "2. Django project structure issues"
-                echo "3. Pylint score below ${PYLINT_THRESHOLD}/10"
+                echo 'Pipeline failed! ❌'
+                echo 'Inspect the console output for root causes.'
             }
         }
-        
+
         cleanup {
             script {
-                echo "🧹 Cleaning up temporary files..."
+                echo 'Cleaning up workspace artifacts...'
                 sh '''
                     find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
                     find . -name "*.pyc" -delete 2>/dev/null || true
-                    echo "Cleanup complete"
                 '''
             }
         }

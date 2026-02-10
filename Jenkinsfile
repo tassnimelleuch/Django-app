@@ -129,7 +129,7 @@ print('✅ Installation successful!')
                     
                     try {
                         sh """
-                            ${PYTEST} accounts --cov --verbose
+                            ${PYTEST} accounts --cov
                         """
                         
                         echo "✅ Tests executed successfully"

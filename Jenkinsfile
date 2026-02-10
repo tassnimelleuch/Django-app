@@ -27,32 +27,23 @@ pipeline {
             }
         }
         
-        stage('Check/Install SonarScanner') {
+        stage('Install SonarScanner') {
             steps {
                 script {
-                    echo "🔧 Checking SonarScanner installation..."
+                    echo "📦 Installing SonarScanner..."
                     
                     sh '''
-                        # Check if sonar-scanner is already installed
-                        if command -v sonar-scanner &> /dev/null; then
-                            echo "✅ SonarScanner already installed globally"
-                            sonar-scanner --version
-                        else
-                            echo "📦 Installing SonarScanner globally..."
-                            
-                            # Method 1: Install from official binaries
+                        # Always download fresh (it's cached anyway)
+                        if [ ! -d "sonar-scanner" ]; then
                             wget -q https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip
                             unzip -q sonar-scanner-cli-*.zip
                             rm sonar-scanner-cli-*.zip
-                            
-                            # Add to PATH for current session
-                            export SONAR_SCANNER_HOME=$(pwd)/sonar-scanner-5.0.1.3006-linux
-                            export PATH=$PATH:$SONAR_SCANNER_HOME/bin
-                            
-                            # Test it
-                            $SONAR_SCANNER_HOME/bin/sonar-scanner --version
-                            echo "✅ SonarScanner installed in workspace"
+                            mv sonar-scanner-* sonar-scanner
                         fi
+                        
+                        # Verify
+                        ./sonar-scanner/bin/sonar-scanner --version
+                        echo "✅ SonarScanner ready"
                     '''
                 }
             }
@@ -70,8 +61,6 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 script {
-                    echo "📦 Installing Python dependencies..."
-                    
                     sh '''
                         echo "Installing/upgrading pip..."
                         ${PIP} install --upgrade pip setuptools wheel
@@ -79,7 +68,7 @@ pipeline {
                         if [ -f requirements.txt ]; then
                             echo "Installing from requirements.txt..."
                             ${PIP} install -r requirements.txt
-                            echo "✅ Dependencies installed from requirements.txt"
+                            echo "✅ Dependencies installed"
                         else
                             echo "Installing Django and test tools..."
                             ${PIP} install django pytest pytest-django pytest-cov pylint
@@ -93,7 +82,7 @@ pipeline {
         stage('Initialize Django') {
             steps {
                 script {
-                    echo "🔧 Initializing Django..."
+                    echo "🔧 Initializing Django with test SECRET_KEY..."
                     sh '''
                         ${VENV_DIR}/bin/python -c "
 import os
@@ -148,37 +137,11 @@ print('✅ Django initialized successfully')
                 script {
                     echo "📊 Running SonarQube analysis..."
                     
-                    // Find sonar-scanner path
-                    sh '''
-                        # Find sonar-scanner
-                        if command -v sonar-scanner &> /dev/null; then
-                            echo "Using global sonar-scanner"
-                            SONAR_SCANNER_CMD="sonar-scanner"
-                        elif [ -d "sonar-scanner-5.0.1.3006-linux" ]; then
-                            echo "Using workspace sonar-scanner"
-                            SONAR_SCANNER_CMD="$(pwd)/sonar-scanner-5.0.1.3006-linux/bin/sonar-scanner"
-                        else
-                            echo "ERROR: sonar-scanner not found!"
-                            exit 1
-                        fi
-                        echo "SonarScanner command: $SONAR_SCANNER_CMD"
-                    '''
-                    
                     withSonarQubeEnv('sonarqube') {
                         sh '''
-                            # Determine which sonar-scanner to use
-                            if command -v sonar-scanner &> /dev/null; then
-                                SCANNER="sonar-scanner"
-                            elif [ -d "sonar-scanner-5.0.1.3006-linux" ]; then
-                                SCANNER="$(pwd)/sonar-scanner-5.0.1.3006-linux/bin/sonar-scanner"
-                            else
-                                echo "ERROR: No sonar-scanner found!"
-                                exit 1
-                            fi
-                            
-                            $SCANNER \
+                            ./sonar-scanner/bin/sonar-scanner \
                                 -Dsonar.projectKey=django-app-${BUILD_NUMBER} \
-                                -Dsonar.projectName="Django Contact App #${BUILD_NUMBER}" \
+                                -Dsonar.projectName="Django Contact App" \
                                 -Dsonar.sources=. \
                                 -Dsonar.exclusions=**/migrations/**,**/__pycache__/**,**/*.pyc,venv/**,**/test*.py \
                                 -Dsonar.python.coverage.reportPaths=coverage.xml \
@@ -194,12 +157,8 @@ print('✅ Django initialized successfully')
         
         stage('Quality Gate Check') {
             steps {
-                script {
-                    echo "⏳ Waiting for SonarQube Quality Gate..."
-                    
-                    timeout(time: 5, unit: 'MINUTES') {
-                        waitForQualityGate abortPipeline: true
-                    }
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
                 }
             }
         }
@@ -221,7 +180,6 @@ print('✅ Django initialized successfully')
         
         success {
             echo "✅✅✅ PIPELINE SUCCESSFUL! ✅✅✅"
-            echo "📊 SonarQube report: http://localhost:9000/dashboard?id=django-app-${BUILD_NUMBER}"
         }
         
         failure {

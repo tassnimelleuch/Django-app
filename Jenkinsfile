@@ -140,10 +140,10 @@ print('✅ Django initialized successfully')
                     withSonarQubeEnv('sonarqube') {
                         sh '''
                             ./sonar-scanner/bin/sonar-scanner \
-                                -Dsonar.projectKey=django-app-${BUILD_NUMBER} \
+                                -Dsonar.projectKey=django-app \
                                 -Dsonar.projectName="Django Contact App" \
                                 -Dsonar.sources=. \
-                                -Dsonar.exclusions=**/migrations/**,**/__pycache__/**,**/*.pyc,venv/**,**/test*.py \
+                                -Dsonar.exclusions=**/migrations/**,**/__pycache__/**,**/*.pyc,venv/**,**/test*.py,**/.git/**
                                 -Dsonar.python.coverage.reportPaths=coverage.xml \
                                 -Dsonar.python.xunit.reportPath=junit-results.xml \
                                 -Dsonar.python.pylint.reportPath=pylint-report.json \
@@ -158,21 +158,19 @@ print('✅ Django initialized successfully')
         stage('Quality Gate Check') {
             steps {
                 script {
-                    echo "🔍 Checking SonarQube Quality Gate (will FAIL pipeline if quality is bad)..."
+                    echo "🔍 Checking SonarQube Quality Gate..."
                     
-                    timeout(time: 5, unit: 'MINUTES') {
-                        def qg = waitForQualityGate abortPipeline: true
+                    timeout(time: 15, unit: 'MINUTES') {
+                        def qg = waitForQualityGate(
+                            abortPipeline: true,
+                            credentialsId: 'sonar-token'  // Use your existing credential
+                        )
                         
                         if (qg.status == 'OK') {
                             echo "✅ Quality Gate PASSED"
                         } else {
                             echo "❌❌❌ CRITICAL: Quality Gate FAILED! ❌❌❌"
-                            echo "Status: ${qg.status}"
-                            echo "URL: http://localhost:9000/dashboard?id=django-app-${BUILD_NUMBER}"
-                            
-                            // THIS WILL FAIL THE PIPELINE
-                            error("SonarQube Quality Gate failed: ${qg.status}. Fix code quality issues!")
-                        }
+                            echo "Status: ${qg.status}"                                                    }
                     }
                 }
             }

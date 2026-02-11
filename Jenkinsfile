@@ -143,7 +143,7 @@ print('✅ Django initialized successfully')
                                 -Dsonar.projectKey=django-app \
                                 -Dsonar.projectName="Django Contact App" \
                                 -Dsonar.sources=. \
-                                -Dsonar.exclusions=**/migrations/**,**/__pycache__/**,**/*.pyc,venv/**,**/test*.py,**/.git/**
+                                -Dsonar.exclusions=**/migrations/**,**/__pycache__/**,**/*.pyc,venv/**,**/test*.py,**/.git/** \
                                 -Dsonar.python.coverage.reportPaths=coverage.xml \
                                 -Dsonar.python.xunit.reportPath=junit-results.xml \
                                 -Dsonar.python.pylint.reportPath=pylint-report.json \

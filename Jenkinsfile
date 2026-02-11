@@ -161,7 +161,7 @@ print('✅ Django initialized successfully')
                     echo "🔍 Checking SonarQube Quality Gate (will FAIL pipeline if quality is bad)..."
                     
                     timeout(time: 5, unit: 'MINUTES') {
-                        def qg = waitForQualityGate abortPipeline: false
+                        def qg = waitForQualityGate abortPipeline: true
                         
                         if (qg.status == 'OK') {
                             echo "✅ Quality Gate PASSED"

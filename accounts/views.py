@@ -2,9 +2,9 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth import logout
-from django.contrib.auth.decorators import login_required, require_POST
-from django.views.decorators.http import require_http_methods, require_safe
-from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
+from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_POST, require_safe, require_http_methods
+from django.views.decorators.csrf import csrf_protect
 from django.http import HttpResponseNotAllowed
 from .forms import RegisterForm
 from .models import Contact, PhoneNumber

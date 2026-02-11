@@ -149,6 +149,8 @@ print('✅ Django initialized successfully')
                                 -Dsonar.python.pylint.reportPath=pylint-report.json \
                                 -Dsonar.python.version=3 \
                                 -Dsonar.sourceEncoding=UTF-8
+                                -Dsonar.analysis.referenceBranch=main \
+                                -Dsonar.analysis.detectedSCM=git
                         '''
                     }
                 }

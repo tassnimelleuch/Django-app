@@ -12,22 +12,23 @@ from .contact_forms import ContactForm, PhoneNumberForm
 
 # SAFE METHODS (GET, HEAD, OPTIONS) - No CSRF needed
 @login_required
-@require_safe  # Only allows GET, HEAD, OPTIONS
+@require_safe
 def dashboard(request):
     """Display the user's dashboard."""
     return render(request, 'accounts/dashboard.html', {'user': request.user})
 
 
-# UNSAFE METHODS - Must use POST and have CSRF protection
-@require_POST  # Only allow POST method
+# UNSAFE METHODS - All POST-only views have CSRF protection via global middleware
+@require_http_methods(['POST'])
+@csrf_protect  # NOSONAR (S4502) - CSRF is enabled globally, this is explicit documentation
 def user_logout(request):
     """Log the user out and redirect to login page."""
     logout(request)
     return redirect('login')
 
 
-@require_http_methods(['GET', 'POST'])  # Explicitly allow methods
-@csrf_protect  # Ensure CSRF protection (though Django does this by default)
+@require_http_methods(['GET', 'POST'])
+@csrf_protect
 def register(request):
     """Handle user registration."""
     if request.method == 'POST':
@@ -55,6 +56,7 @@ def contact_list(request):
 
 @login_required
 @require_http_methods(['GET', 'POST'])
+@csrf_protect
 def add_contact(request):
     """Handle adding a new contact."""
     if request.method == 'POST':
@@ -96,6 +98,7 @@ def contact_detail(request, contact_id):
 
 @login_required
 @require_http_methods(['GET', 'POST'])
+@csrf_protect
 def add_phone(request, contact_id):
     """Handle adding a phone number to a contact."""
     contact = get_object_or_404(Contact, id=contact_id, user=request.user)
@@ -118,6 +121,7 @@ def add_phone(request, contact_id):
 
 @login_required
 @require_http_methods(['GET', 'POST'])
+@csrf_protect
 def edit_contact(request, contact_id):
     """Handle editing a contact."""
     contact = get_object_or_404(Contact, id=contact_id, user=request.user)
@@ -142,7 +146,8 @@ def edit_contact(request, contact_id):
 
 
 @login_required
-@require_POST  
+@require_http_methods(['POST'])
+@csrf_protect  # NOSONAR (S4502) - POST-only deletion with CSRF and authentication
 def delete_contact(request, contact_id):
     """Handle deleting a contact."""
     contact = get_object_or_404(Contact, id=contact_id, user=request.user)
@@ -157,6 +162,7 @@ def delete_contact(request, contact_id):
 
 @login_required
 @require_http_methods(['GET', 'POST'])
+@csrf_protect
 def edit_phone(request, phone_id):
     """Handle editing a phone number."""
     phone = get_object_or_404(
@@ -183,7 +189,8 @@ def edit_phone(request, phone_id):
 
 
 @login_required
-@require_POST  # Only allow POST for deletions
+@require_http_methods(['POST'])
+@csrf_protect  # NOSONAR (S4502) - POST-only deletion with CSRF and authentication
 def delete_phone(request, phone_id):
     """Handle deleting a phone number."""
     phone = get_object_or_404(

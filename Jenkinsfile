@@ -295,23 +295,7 @@ EOF
             }
         }
                 
-        stage('Deploy to Staging') {
-            when {
-                branch 'main'
-                expression { env.DOCKER_IMAGE_NAME }
-                expression { currentBuild.result != 'FAILURE' }
-            }
-            steps {
-                script {
-                    echo "🚀 Ready to deploy Docker image to staging environment..."
-                    echo "Image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
-                    echo ""
-                    echo "To deploy manually:"
-                    echo "docker pull ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
-                    echo "docker run -d -p 8000:8000 ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
-                }
-            }
-        }
+       
     }
     
     post {

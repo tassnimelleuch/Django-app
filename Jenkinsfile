@@ -19,7 +19,7 @@ pipeline {
         
         // Docker image configuration
         DOCKER_REGISTRY = ''  // IMPORTANT: Empty string for Docker Hub
-        DOCKER_IMAGE_NAME = 'YOUR_DOCKERHUB_USERNAME/django-contact-app'  // CHANGE THIS to your actual username
+        DOCKER_IMAGE_NAME = 'tasnimelleuchenis/django-contact-app'  
         DOCKER_IMAGE_TAG = "${env.BUILD_NUMBER}"
         DOCKER_FULL_IMAGE = "${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
         DOCKER_LATEST_IMAGE = "${DOCKER_IMAGE_NAME}:latest"

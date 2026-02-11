@@ -206,53 +206,57 @@ EOF
     }
     
     post {
-        always {
-            // Archive all reports
-            archiveArtifacts artifacts: 'coverage.xml, junit-results.xml, pylint-report.json, sonar-project.properties, .scannerwork/report-task.txt', allowEmptyArchive: true
-            
-            // Display SonarQube URL if available - FIXED VERSION
-            script {
-                if (fileExists('.scannerwork/report-task.txt')) {
-                    def reportTask = readFile('.scannerwork/report-task.txt')
-                    
-                    // Safely extract values with null checks
-                    def serverUrlMatch = reportTask =~ /serverUrl=(.*)/
-                    def serverUrl = serverUrlMatch ? serverUrlMatch[0][1] : null
-                    
-                    def taskIdMatch = reportTask =~ /taskId=(.*)/
-                    def taskId = taskIdMatch ? taskIdMatch[0][1] : null
-                    
-                    def ceTaskUrlMatch = reportTask =~ /ceTaskUrl=(.*)/
-                    def ceTaskUrl = ceTaskUrlMatch ? ceTaskUrlMatch[0][1] : null
-                    
-                    def dashboardUrlMatch = reportTask =~ /dashboardUrl=(.*)/
-                    def dashboardUrl = dashboardUrlMatch ? dashboardUrlMatch[0][1] : null
-                    
-                    if (dashboardUrl) {
-                        echo "SonarQube Analysis URL: ${dashboardUrl}"
-                    }
-                    if (ceTaskUrl) {
-                        echo "SonarQube Task URL: ${ceTaskUrl}"
-                    }
-                } else {
-                    echo "SonarQube report file not found at .scannerwork/report-task.txt"
+    always {
+        // Archive all reports
+        archiveArtifacts artifacts: 'coverage.xml, junit-results.xml, pylint-report.json, sonar-project.properties, .scannerwork/report-task.txt', allowEmptyArchive: true
+        
+        // Display SonarQube URL if available - SAFER VERSION
+        script {
+            if (fileExists('.scannerwork/report-task.txt')) {
+                def reportTask = readFile('.scannerwork/report-task.txt')
+                
+                // Helper function to safely extract values
+                def extractValue = { key ->
+                    def matcher = reportTask =~ /${key}=(.*)/
+                    return matcher.find() ? matcher.group(1) : null
                 }
+                
+                def serverUrl   = extractValue('serverUrl')
+                def taskId      = extractValue('taskId')
+                def ceTaskUrl   = extractValue('ceTaskUrl')
+                def dashboardUrl = extractValue('dashboardUrl')
+                
+                if (dashboardUrl) {
+                    echo "SonarQube Analysis URL: ${dashboardUrl}"
+                }
+                if (ceTaskUrl) {
+                    echo "SonarQube Task URL: ${ceTaskUrl}"
+                }
+                if (serverUrl && taskId) {
+                    echo "SonarQube Server: ${serverUrl}"
+                    echo "SonarQube Task ID: ${taskId}"
+                }
+            } else {
+                echo "SonarQube report file not found at .scannerwork/report-task.txt"
             }
-            
-            // Cleanup
-            sh '''
-                rm -rf ${VENV_DIR} || true
-                rm -f coverage.xml junit-results.xml pylint-report.json || true
-                # Keep sonar-scanner directory for future runs
-            '''
-            echo "Pipeline execution completed"
         }
         
-        success {
-            echo "✅✅✅ PIPELINE SUCCESSFUL! ✅✅✅"
-        }
+        // Cleanup
+        sh '''
+            rm -rf ${VENV_DIR} || true
+            rm -f coverage.xml junit-results.xml pylint-report.json || true
+            # Keep sonar-scanner directory for future runs
+        '''
         
-        failure {
-            echo "❌❌❌ PIPELINE FAILED ❌❌❌"
-        }
+        echo "Pipeline execution completed"
     }
+    
+    success {
+        echo "✅✅✅ PIPELINE SUCCESSFUL! ✅✅✅"
+    }
+    
+    failure {
+        echo "❌❌❌ PIPELINE FAILED ❌❌❌"
+    }
+}
+}

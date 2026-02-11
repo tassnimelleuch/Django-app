@@ -1,24 +1,33 @@
-""""Views for user account management, authentication, and contact management."""
+"""Views for user account management, authentication, and contact management."""
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth import logout
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required, require_POST
+from django.views.decorators.http import require_http_methods, require_safe
+from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
+from django.http import HttpResponseNotAllowed
 from .forms import RegisterForm
 from .models import Contact, PhoneNumber
 from .contact_forms import ContactForm, PhoneNumberForm
 
+# SAFE METHODS (GET, HEAD, OPTIONS) - No CSRF needed
 @login_required
+@require_safe  # Only allows GET, HEAD, OPTIONS
 def dashboard(request):
     """Display the user's dashboard."""
     return render(request, 'accounts/dashboard.html', {'user': request.user})
 
 
+# UNSAFE METHODS - Must use POST and have CSRF protection
+@require_POST  # Only allow POST method
 def user_logout(request):
     """Log the user out and redirect to login page."""
     logout(request)
     return redirect('login')
 
 
+@require_http_methods(['GET', 'POST'])  # Explicitly allow methods
+@csrf_protect  # Ensure CSRF protection (though Django does this by default)
 def register(request):
     """Handle user registration."""
     if request.method == 'POST':
@@ -37,6 +46,7 @@ def register(request):
 
 
 @login_required
+@require_safe
 def contact_list(request):
     """Display a list of all contacts for the logged-in user."""
     contacts = Contact.objects.filter(user=request.user)
@@ -44,6 +54,7 @@ def contact_list(request):
 
 
 @login_required
+@require_http_methods(['GET', 'POST'])
 def add_contact(request):
     """Handle adding a new contact."""
     if request.method == 'POST':
@@ -76,6 +87,7 @@ def add_contact(request):
 
 
 @login_required
+@require_safe
 def contact_detail(request, contact_id):
     """Display details for a specific contact."""
     contact = get_object_or_404(Contact, id=contact_id, user=request.user)
@@ -83,6 +95,7 @@ def contact_detail(request, contact_id):
 
 
 @login_required
+@require_http_methods(['GET', 'POST'])
 def add_phone(request, contact_id):
     """Handle adding a phone number to a contact."""
     contact = get_object_or_404(Contact, id=contact_id, user=request.user)
@@ -104,6 +117,7 @@ def add_phone(request, contact_id):
 
 
 @login_required
+@require_http_methods(['GET', 'POST'])
 def edit_contact(request, contact_id):
     """Handle editing a contact."""
     contact = get_object_or_404(Contact, id=contact_id, user=request.user)
@@ -128,23 +142,21 @@ def edit_contact(request, contact_id):
 
 
 @login_required
+@require_POST  # Only allow POST for deletions
 def delete_contact(request, contact_id):
     """Handle deleting a contact."""
     contact = get_object_or_404(Contact, id=contact_id, user=request.user)
-
-    if request.method == 'POST':
-        contact_name = contact.first_name
-        contact.delete()
-        messages.success(
-            request,
-            f'Contact {contact_name} deleted successfully!'
-        )
-        return redirect('contact_list')
-
-    return render(request, 'accounts/delete_contact.html', {'contact': contact})
+    contact_name = contact.first_name
+    contact.delete()
+    messages.success(
+        request,
+        f'Contact {contact_name} deleted successfully!'
+    )
+    return redirect('contact_list')
 
 
 @login_required
+@require_http_methods(['GET', 'POST'])
 def edit_phone(request, phone_id):
     """Handle editing a phone number."""
     phone = get_object_or_404(
@@ -171,6 +183,7 @@ def edit_phone(request, phone_id):
 
 
 @login_required
+@require_POST  # Only allow POST for deletions
 def delete_phone(request, phone_id):
     """Handle deleting a phone number."""
     phone = get_object_or_404(
@@ -179,18 +192,10 @@ def delete_phone(request, phone_id):
         contact__user=request.user
     )
     contact = phone.contact
-
-    if request.method == 'POST':
-        phone_number = phone.number
-        phone.delete()
-        messages.success(
-            request,
-            f'Phone number {phone_number} deleted!'
-        )
-        return redirect('contact_detail', contact_id=contact.id)
-
-    return render(
+    phone_number = phone.number
+    phone.delete()
+    messages.success(
         request,
-        'accounts/delete_phone.html',
-        {'phone': phone, 'contact': contact}
+        f'Phone number {phone_number} deleted!'
     )
+    return redirect('contact_detail', contact_id=contact.id)

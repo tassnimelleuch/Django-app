@@ -25,7 +25,9 @@
 <div class="menu">
     <a href="{% url 'contact_list' %}" style="background: #2196F3;">📇 View Contacts</a>
     <a href="{% url 'add_contact' %}" style="background: #4CAF50;">➕ Add New Contact</a>
-    <a href="{% url 'logout' %}" style="background: #f44336;">Logout</a>
-</div>
+<form method="post" action="{% url 'logout' %}">
+    {% csrf_token %}
+    <button type="submit">Logout</button>
+</form></div>
 </body>
 </html>

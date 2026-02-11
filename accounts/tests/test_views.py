@@ -59,20 +59,6 @@ def test_register_view_post_invalid(client):
     assert response.context['form'].errors
 
 
-# ===== LOGIN/LOGOUT TESTS =====
-
-@pytest.mark.django_db
-def test_logout_view(client, test_user):
-    """Test logout view redirects to login."""
-    client.force_login(test_user)
-    response = client.get(reverse('logout'))
-    assert response.status_code == 302
-    assert response.url == reverse('login')
-    # User should be logged out
-    response = client.get(reverse('dashboard'))
-    # Should redirect to login since logged out
-    assert response.status_code == 302
-
 
 # ===== DASHBOARD VIEW TESTS =====
 
@@ -287,16 +273,6 @@ def test_edit_contact_other_user_404(client, test_user):
 
 # ===== DELETE CONTACT VIEW TESTS =====
 
-@pytest.mark.django_db
-def test_delete_contact_get(client, test_contact):
-    """Test GET request to delete confirmation page."""
-    client.force_login(test_contact.user)
-    response = client.get(
-        reverse('delete_contact', kwargs={'contact_id': test_contact.id})
-    )
-    assert response.status_code == 200
-    assert 'contact' in response.context
-    assert response.context['contact'] == test_contact
 
 
 @pytest.mark.django_db

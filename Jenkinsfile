@@ -210,17 +210,32 @@ EOF
             // Archive all reports
             archiveArtifacts artifacts: 'coverage.xml, junit-results.xml, pylint-report.json, sonar-project.properties, .scannerwork/report-task.txt', allowEmptyArchive: true
             
-            // Display SonarQube URL if available
+            // Display SonarQube URL if available - FIXED VERSION
             script {
                 if (fileExists('.scannerwork/report-task.txt')) {
                     def reportTask = readFile('.scannerwork/report-task.txt')
-                    def serverUrl = reportTask.find(/serverUrl=(.*)/)?.split('=')[1]
-                    def taskId = reportTask.find(/taskId=(.*)/)?.split('=')[1]
-                    def ceTaskUrl = reportTask.find(/ceTaskUrl=(.*)/)?.split('=')[1]
-                    def dashboardUrl = reportTask.find(/dashboardUrl=(.*)/)?.split('=')[1]
                     
-                    echo "SonarQube Analysis URL: ${dashboardUrl}"
-                    echo "SonarQube Task URL: ${ceTaskUrl}"
+                    // Safely extract values with null checks
+                    def serverUrlMatch = reportTask =~ /serverUrl=(.*)/
+                    def serverUrl = serverUrlMatch ? serverUrlMatch[0][1] : null
+                    
+                    def taskIdMatch = reportTask =~ /taskId=(.*)/
+                    def taskId = taskIdMatch ? taskIdMatch[0][1] : null
+                    
+                    def ceTaskUrlMatch = reportTask =~ /ceTaskUrl=(.*)/
+                    def ceTaskUrl = ceTaskUrlMatch ? ceTaskUrlMatch[0][1] : null
+                    
+                    def dashboardUrlMatch = reportTask =~ /dashboardUrl=(.*)/
+                    def dashboardUrl = dashboardUrlMatch ? dashboardUrlMatch[0][1] : null
+                    
+                    if (dashboardUrl) {
+                        echo "SonarQube Analysis URL: ${dashboardUrl}"
+                    }
+                    if (ceTaskUrl) {
+                        echo "SonarQube Task URL: ${ceTaskUrl}"
+                    }
+                } else {
+                    echo "SonarQube report file not found at .scannerwork/report-task.txt"
                 }
             }
             
@@ -241,4 +256,3 @@ EOF
             echo "❌❌❌ PIPELINE FAILED ❌❌❌"
         }
     }
-}

@@ -142,7 +142,7 @@ def edit_contact(request, contact_id):
 
 
 @login_required
-@require_POST  # Only allow POST for deletions
+@require_POST  
 def delete_contact(request, contact_id):
     """Handle deleting a contact."""
     contact = get_object_or_404(Contact, id=contact_id, user=request.user)

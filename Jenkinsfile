@@ -143,20 +143,19 @@ print('✅ Django initialized successfully')
                                 -Dsonar.projectKey=django-app \
                                 -Dsonar.projectName="Django Contact App" \
                                 -Dsonar.sources=. \
-                                -Dsonar.exclusions=**/migrations/**,**/__pycache__/**,**/*.pyc,venv/**,**/test*.py,**/.git/** \
+                                -Dsonar.exclusions=**/migrations/**,**/__pycache__/**,**/*.pyc,venv/**,**/.git/**,coverage.xml,junit-results.xml \
+                                -Dsonar.test.inclusions=**/test*.py,**/tests/** \
                                 -Dsonar.python.coverage.reportPaths=coverage.xml \
                                 -Dsonar.python.xunit.reportPath=junit-results.xml \
-                                -Dsonar.python.pylint.reportPath=pylint-report.json \
+                                -Dsonar.python.pylint.reportPaths=pylint-report.json \
                                 -Dsonar.python.version=3 \
-                                -Dsonar.sourceEncoding=UTF-8
-                                -Dsonar.analysis.referenceBranch=main \
-                                -Dsonar.analysis.detectedSCM=git
+                                -Dsonar.sourceEncoding=UTF-8 \
+                                -Dsonar.analysis.referenceBranch=main
                         '''
                     }
                 }
-            }
-        }
-        
+    }
+}
         stage('Quality Gate Check') {
             steps {
                 script {

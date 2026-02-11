@@ -18,11 +18,11 @@ pipeline {
         SECRET_KEY = sh(script: 'python3 -c "import secrets; print(secrets.token_urlsafe(50))"', returnStdout: true).trim()
         
         // Docker image configuration
-        DOCKER_REGISTRY = 'your-registry.com'  // Change this to your registry
-        DOCKER_IMAGE_NAME = 'django-contact-app'
+        DOCKER_REGISTRY = ''  // IMPORTANT: Empty string for Docker Hub
+        DOCKER_IMAGE_NAME = 'YOUR_DOCKERHUB_USERNAME/django-contact-app'  // CHANGE THIS to your actual username
         DOCKER_IMAGE_TAG = "${env.BUILD_NUMBER}"
-        DOCKER_FULL_IMAGE = "${DOCKER_REGISTRY}/${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
-        DOCKER_LATEST_IMAGE = "${DOCKER_REGISTRY}/${DOCKER_IMAGE_NAME}:latest"
+        DOCKER_FULL_IMAGE = "${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
+        DOCKER_LATEST_IMAGE = "${DOCKER_IMAGE_NAME}:latest"
     }
     
     stages {
@@ -259,61 +259,40 @@ EOF
         
         stage('Docker Push') {
             when {
-                // Only push if we built the image successfully
                 expression { env.DOCKER_IMAGE_NAME && fileExists('Dockerfile') }
             }
             environment {
-                // These should be set in Jenkins credentials
-                DOCKER_USER = credentials('docker-hub-username')
-                DOCKER_PASS = credentials('docker-hub-password')
+                // These must match EXACTLY what you named them in Jenkins credentials
+                DOCKER_HUB_CREDS = credentials('docker-hub-credentials')
             }
             steps {
                 script {
-                    echo "📤 Pushing Docker image to registry..."
+                    echo "📤 Pushing Docker image to Docker Hub..."
                     
-                    // Login to Docker registry
-                    sh """
-                        echo ${DOCKER_PASS} | docker login ${DOCKER_REGISTRY} \
-                            -u ${DOCKER_USER} \
-                            --password-stdin
-                    """
-                    
-                    // Tag and push with version
-                    sh """
-                        docker tag ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG} ${DOCKER_FULL_IMAGE}
-                        docker push ${DOCKER_FULL_IMAGE}
-                    """
-                    
-                    // Tag and push as latest
-                    sh """
-                        docker tag ${DOCKER_IMAGE_NAME}:latest ${DOCKER_LATEST_IMAGE}
-                        docker push ${DOCKER_LATEST_IMAGE}
-                    """
-                    
-                    echo "✅ Docker image pushed: ${DOCKER_FULL_IMAGE}"
-                    
-                    // Optional: Clean up local images to save space
-                    sh """
-                        docker rmi ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG} || true
-                        docker rmi ${DOCKER_IMAGE_NAME}:latest || true
-                        docker rmi ${DOCKER_FULL_IMAGE} || true
-                        docker rmi ${DOCKER_LATEST_IMAGE} || true
-                    """
+                    // Use single quotes to avoid Groovy string interpolation warning
+                    sh '''
+                        echo $DOCKER_HUB_CREDS_PSW | docker login -u $DOCKER_HUB_CREDS_USR --password-stdin
+                        
+                        # Tag and push with build number
+                        docker tag django-contact-app:${BUILD_NUMBER} ${DOCKER_IMAGE_NAME}:${BUILD_NUMBER}
+                        docker push ${DOCKER_IMAGE_NAME}:${BUILD_NUMBER}
+                        
+                        # Tag and push as latest
+                        docker tag django-contact-app:latest ${DOCKER_IMAGE_NAME}:latest
+                        docker push ${DOCKER_IMAGE_NAME}:latest
+                        
+                        docker logout
+                        echo "✅ Docker image pushed to Docker Hub: ${DOCKER_IMAGE_NAME}:${BUILD_NUMBER}"
+                    '''
                 }
             }
             post {
                 failure {
-                    echo "❌ Failed to push Docker image"
-                    // Clean up Docker login
-                    sh 'docker logout ${DOCKER_REGISTRY} || true'
-                }
-                success {
-                    echo "✅ Docker image successfully published"
-                    sh 'docker logout ${DOCKER_REGISTRY} || true'
+                    sh 'docker logout || true'
                 }
             }
         }
-        
+                
         stage('Deploy to Staging') {
             when {
                 // Optional: Only deploy from main/master branch

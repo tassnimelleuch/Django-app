@@ -16,6 +16,13 @@ pipeline {
         PYLINT_THRESHOLD = '9.00'
         DJANGO_SETTINGS_MODULE = 'myproject.settings'
         SECRET_KEY = sh(script: 'python3 -c "import secrets; print(secrets.token_urlsafe(50))"', returnStdout: true).trim()
+        
+        // Docker image configuration
+        DOCKER_REGISTRY = 'your-registry.com'  // Change this to your registry
+        DOCKER_IMAGE_NAME = 'django-contact-app'
+        DOCKER_IMAGE_TAG = "${env.BUILD_NUMBER}"
+        DOCKER_FULL_IMAGE = "${DOCKER_REGISTRY}/${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
+        DOCKER_LATEST_IMAGE = "${DOCKER_REGISTRY}/${DOCKER_IMAGE_NAME}:latest"
     }
     
     stages {
@@ -194,6 +201,8 @@ EOF
                             } else {
                                 echo "⚠️ Quality Gate FAILED with status: ${qg.status}"
                                 echo "Check SonarQube for detailed analysis"
+                                // Uncomment the next line to fail the pipeline if quality gate fails
+                                // error "Quality Gate failed: ${qg.status}"
                             }
                         } catch (Exception e) {
                             echo "⚠️ Could not retrieve Quality Gate status: ${e.message}"
@@ -203,60 +212,201 @@ EOF
                 }
             }
         }
-    }
-    
-    post {
-    always {
-        // Archive all reports
-        archiveArtifacts artifacts: 'coverage.xml, junit-results.xml, pylint-report.json, sonar-project.properties, .scannerwork/report-task.txt', allowEmptyArchive: true
         
-        // Display SonarQube URL if available - SAFER VERSION
-        script {
-            if (fileExists('.scannerwork/report-task.txt')) {
-                def reportTask = readFile('.scannerwork/report-task.txt')
-                
-                // Helper function to safely extract values
-                def extractValue = { key ->
-                    def matcher = reportTask =~ /${key}=(.*)/
-                    return matcher.find() ? matcher.group(1) : null
+        stage('Docker Build and Tag') {
+            when {
+                allOf {
+                    expression { fileExists('Dockerfile') }
+                    expression { 
+                        
+                        true 
+                    }
                 }
-                
-                def serverUrl   = extractValue('serverUrl')
-                def taskId      = extractValue('taskId')
-                def ceTaskUrl   = extractValue('ceTaskUrl')
-                def dashboardUrl = extractValue('dashboardUrl')
-                
-                if (dashboardUrl) {
-                    echo "SonarQube Analysis URL: ${dashboardUrl}"
+            }
+            steps {
+                script {
+                    echo "🐳 Building Docker image..."
+                    
+                    sh """
+                        docker build \
+                            --build-arg BUILD_NUMBER=${env.BUILD_NUMBER} \
+                            --build-arg BUILD_DATE=\$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
+                            --build-arg VCS_REF=\$(git rev-parse --short HEAD) \
+                            -t ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG} \
+                            -t ${DOCKER_IMAGE_NAME}:latest \
+                            .
+                    """
+                    
+                    // Optional: Run security scan on Docker image
+                    echo "🔒 Running security scan on Docker image..."
+                    try {
+                        sh """
+                            docker run --rm \
+                                -v /var/run/docker.sock:/var/run/docker.sock \
+                                aquasec/trivy image \
+                                --severity HIGH,CRITICAL \
+                                --no-progress \
+                                --exit-code 0 \
+                                ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}
+                        """
+                        echo "✅ Docker image security scan completed"
+                    } catch (Exception e) {
+                        echo "⚠️ Docker security scan failed: ${e.message}"
+                    }
                 }
-                if (ceTaskUrl) {
-                    echo "SonarQube Task URL: ${ceTaskUrl}"
-                }
-                if (serverUrl && taskId) {
-                    echo "SonarQube Server: ${serverUrl}"
-                    echo "SonarQube Task ID: ${taskId}"
-                }
-            } else {
-                echo "SonarQube report file not found at .scannerwork/report-task.txt"
             }
         }
         
-        // Cleanup
-        sh '''
-            rm -rf ${VENV_DIR} || true
-            rm -f coverage.xml junit-results.xml pylint-report.json || true
-            # Keep sonar-scanner directory for future runs
-        '''
+        stage('Docker Push') {
+            when {
+                // Only push if we built the image successfully
+                expression { env.DOCKER_IMAGE_NAME && fileExists('Dockerfile') }
+            }
+            environment {
+                // These should be set in Jenkins credentials
+                DOCKER_USER = credentials('docker-hub-username')
+                DOCKER_PASS = credentials('docker-hub-password')
+            }
+            steps {
+                script {
+                    echo "📤 Pushing Docker image to registry..."
+                    
+                    // Login to Docker registry
+                    sh """
+                        echo ${DOCKER_PASS} | docker login ${DOCKER_REGISTRY} \
+                            -u ${DOCKER_USER} \
+                            --password-stdin
+                    """
+                    
+                    // Tag and push with version
+                    sh """
+                        docker tag ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG} ${DOCKER_FULL_IMAGE}
+                        docker push ${DOCKER_FULL_IMAGE}
+                    """
+                    
+                    // Tag and push as latest
+                    sh """
+                        docker tag ${DOCKER_IMAGE_NAME}:latest ${DOCKER_LATEST_IMAGE}
+                        docker push ${DOCKER_LATEST_IMAGE}
+                    """
+                    
+                    echo "✅ Docker image pushed: ${DOCKER_FULL_IMAGE}"
+                    
+                    // Optional: Clean up local images to save space
+                    sh """
+                        docker rmi ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG} || true
+                        docker rmi ${DOCKER_IMAGE_NAME}:latest || true
+                        docker rmi ${DOCKER_FULL_IMAGE} || true
+                        docker rmi ${DOCKER_LATEST_IMAGE} || true
+                    """
+                }
+            }
+            post {
+                failure {
+                    echo "❌ Failed to push Docker image"
+                    // Clean up Docker login
+                    sh 'docker logout ${DOCKER_REGISTRY} || true'
+                }
+                success {
+                    echo "✅ Docker image successfully published"
+                    sh 'docker logout ${DOCKER_REGISTRY} || true'
+                }
+            }
+        }
         
-        echo "Pipeline execution completed"
+        stage('Deploy to Staging') {
+            when {
+                // Optional: Only deploy from main/master branch
+                branch 'main'
+                expression { env.DOCKER_FULL_IMAGE }
+            }
+            steps {
+                script {
+                    echo "🚀 Deploying Docker image to staging environment..."
+                    
+                    // Example deployment commands - customize based on your infrastructure
+                    sh """
+                        # Example: Update Kubernetes deployment
+                        # kubectl set image deployment/django-app \
+                        #     django-container=${DOCKER_FULL_IMAGE} \
+                        #     --record
+                        
+                        # Example: Docker Compose deployment
+                        # docker-compose -f docker-compose.staging.yml up -d
+                        
+                        echo "✅ Staging deployment initiated"
+                    """
+                }
+            }
+        }
     }
     
-    success {
-        echo "✅✅✅ PIPELINE SUCCESSFUL! ✅✅✅"
+    post {
+        always {
+            // Archive all reports
+            archiveArtifacts artifacts: 'coverage.xml, junit-results.xml, pylint-report.json, sonar-project.properties, .scannerwork/report-task.txt', allowEmptyArchive: true
+            
+            // Display SonarQube URL if available - SAFER VERSION
+            script {
+                if (fileExists('.scannerwork/report-task.txt')) {
+                    def reportTask = readFile('.scannerwork/report-task.txt')
+                    
+                    // Helper function to safely extract values
+                    def extractValue = { key ->
+                        def matcher = reportTask =~ /${key}=(.*)/
+                        return matcher.find() ? matcher.group(1) : null
+                    }
+                    
+                    def serverUrl   = extractValue('serverUrl')
+                    def taskId      = extractValue('taskId')
+                    def ceTaskUrl   = extractValue('ceTaskUrl')
+                    def dashboardUrl = extractValue('dashboardUrl')
+                    
+                    if (dashboardUrl) {
+                        echo "SonarQube Analysis URL: ${dashboardUrl}"
+                    }
+                    if (ceTaskUrl) {
+                        echo "SonarQube Task URL: ${ceTaskUrl}"
+                    }
+                    if (serverUrl && taskId) {
+                        echo "SonarQube Server: ${serverUrl}"
+                        echo "SonarQube Task ID: ${taskId}"
+                    }
+                } else {
+                    echo "SonarQube report file not found at .scannerwork/report-task.txt"
+                }
+            }
+            
+            // Docker cleanup
+            script {
+                try {
+                    sh 'docker logout ${DOCKER_REGISTRY} || true'
+                } catch (Exception e) {
+                    echo "Docker logout failed: ${e.message}"
+                }
+            }
+            
+            // Cleanup
+            sh '''
+                rm -rf ${VENV_DIR} || true
+                rm -f coverage.xml junit-results.xml pylint-report.json || true
+                # Keep sonar-scanner directory for future runs
+            '''
+            
+            echo "Pipeline execution completed"
+        }
+        
+        success {
+            echo "✅✅✅ PIPELINE SUCCESSFUL! ✅✅✅"
+            echo "Docker image: ${env.DOCKER_FULL_IMAGE}"
+        }
+        
+        failure {
+            echo "❌❌❌ PIPELINE FAILED ❌❌❌"
+        }
+        
+        unstable {
+            echo "⚠️⚠️⚠️ PIPELINE UNSTABLE ⚠️⚠️⚠️"
+        }
     }
-    
-    failure {
-        echo "❌❌❌ PIPELINE FAILED ❌❌❌"
-    }
-}
 }

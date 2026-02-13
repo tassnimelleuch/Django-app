@@ -214,7 +214,6 @@ EOF
                 script {
                     echo "🐳 Building Docker image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
                     
-                    // Retry pulling base image with exponential backoff
                     sh '''
                         echo "Pulling base image with retries..."
                         BASE_IMAGE=$(grep -i "^FROM" Dockerfile | head -1 | cut -d' ' -f2)
@@ -366,7 +365,6 @@ EOF
             // Don't cleanup the container, keep it running!
             echo "✅ Staging container 'django-staging' is still running"
             
-            // Cleanup only build artifacts
             sh '''
                 rm -rf ${VENV_DIR} || true
                 rm -f coverage.xml junit-results.xml pylint-report.json || true

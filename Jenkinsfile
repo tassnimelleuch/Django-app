@@ -3,7 +3,7 @@ pipeline {
     
     options {
         buildDiscarder(logRotator(numToKeepStr: '10'))
-        timeout(time: 30, unit: 'MINUTES')
+        timeout(time: 10, unit: 'MINUTES')
     }
     
     environment {
@@ -300,7 +300,6 @@ EOF
                 }
             }
             
-            // Clean up virtual environment and reports
             sh '''
                 rm -rf ${VENV_DIR} || true
                 rm -f coverage.xml junit-results.xml pylint-report.json || true

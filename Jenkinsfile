@@ -303,7 +303,7 @@ EOF
                         echo "Starting new container..."
                         docker run -d \
                             --name django-staging \
-                            -p 8000:8000 \
+                            -p 0.0.0.0:8000:8000 \
                             -e DJANGO_ENV=staging \
                             -e SECRET_KEY=${SECRET_KEY} \
                             --restart unless-stopped \

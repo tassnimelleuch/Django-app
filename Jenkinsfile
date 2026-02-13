@@ -2,8 +2,6 @@ pipeline {
     agent any
     
     options {
-        timeout(time: 30, unit: 'MINUTES')
-        retry(1)
         buildDiscarder(logRotator(numToKeepStr: '10'))
     }
     
@@ -17,11 +15,10 @@ pipeline {
         DJANGO_SETTINGS_MODULE = 'myproject.settings'
         SECRET_KEY = sh(script: 'python3 -c "import secrets; print(secrets.token_urlsafe(50))"', returnStdout: true).trim()
         
-        // Docker Hub configuration - FIXED
+        // Docker Hub configuration
         DOCKER_REGISTRY = ''  // Empty string for Docker Hub
         DOCKER_IMAGE_NAME = 'tasnimelleuchenis/django-contact-app'  
         DOCKER_IMAGE_TAG = "${env.BUILD_NUMBER}"
-        // These are now just for reference, not used in commands
         DOCKER_FULL_IMAGE = "${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
         DOCKER_LATEST_IMAGE = "${DOCKER_IMAGE_NAME}:latest"
     }
@@ -41,7 +38,6 @@ pipeline {
                     echo "📦 Installing SonarScanner..."
                     
                     sh '''
-                        # Always download fresh (it's cached anyway)
                         if [ ! -d "sonar-scanner" ]; then
                             wget -q https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip
                             unzip -q sonar-scanner-cli-*.zip
@@ -134,10 +130,9 @@ print('✅ Django initialized successfully')
                 script {
                     echo "🔍 Running Pylint..."
                     sh """
-                        # Run Pylint with proper output format for SonarQube
                         ${PYLINT} accounts \
                             --output-format=json:pylint-report.json \
-                            --exit-zero || echo "⚠️ Pylint analysis completed"
+                            --exit-zero || echo "Pylint analysis completed"
                         
                         # Verify Pylint report was created
                         if [ -f pylint-report.json ]; then
@@ -295,7 +290,23 @@ EOF
             }
         }
                 
-       
+        stage('Deploy to Staging') {
+            when {
+                branch 'main'
+                expression { env.DOCKER_IMAGE_NAME }
+                expression { currentBuild.result != 'FAILURE' }
+            }
+            steps {
+                script {
+                    echo "🚀 Ready to deploy Docker image to staging environment..."
+                    echo "Image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
+                    echo ""
+                    echo "To deploy manually:"
+                    echo "docker pull ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
+                    echo "docker run -d -p 8000:8000 ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
+                }
+            }
+        }
     }
     
     post {

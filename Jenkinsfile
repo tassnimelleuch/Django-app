@@ -16,11 +16,9 @@ pipeline {
         DJANGO_SETTINGS_MODULE = 'myproject.settings'
         SECRET_KEY = sh(script: 'python3 -c "import secrets; print(secrets.token_urlsafe(50))"', returnStdout: true).trim()
         
-        // Docker Hub configuration
         DOCKER_IMAGE_NAME = 'tasnimelleuchenis/django-contact-app'
         DOCKER_IMAGE_TAG = "${env.BUILD_NUMBER}"
         
-        // Docker retry configuration
         DOCKER_PULL_RETRIES = '3'
         DOCKER_PULL_DELAY = '5'
     }

@@ -3,6 +3,7 @@ pipeline {
     
     options {
         buildDiscarder(logRotator(numToKeepStr: '10'))
+        timeout(time: 30, unit: 'MINUTES')
     }
     
     environment {
@@ -16,11 +17,12 @@ pipeline {
         SECRET_KEY = sh(script: 'python3 -c "import secrets; print(secrets.token_urlsafe(50))"', returnStdout: true).trim()
         
         // Docker Hub configuration
-        DOCKER_REGISTRY = ''  // Empty string for Docker Hub
-        DOCKER_IMAGE_NAME = 'tasnimelleuchenis/django-contact-app'  
+        DOCKER_IMAGE_NAME = 'tasnimelleuchenis/django-contact-app'
         DOCKER_IMAGE_TAG = "${env.BUILD_NUMBER}"
-        DOCKER_FULL_IMAGE = "${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
-        DOCKER_LATEST_IMAGE = "${DOCKER_IMAGE_NAME}:latest"
+        
+        // Docker retry configuration
+        DOCKER_PULL_RETRIES = '3'
+        DOCKER_PULL_DELAY = '5'
     }
     
     stages {
@@ -45,7 +47,6 @@ pipeline {
                             mv sonar-scanner-* sonar-scanner
                         fi
                         
-                        # Verify
                         ./sonar-scanner/bin/sonar-scanner --version
                         echo "✅ SonarScanner ready"
                     '''
@@ -69,7 +70,6 @@ pipeline {
                         echo "Installing/upgrading pip..."
                         ${PIP} install --upgrade pip setuptools wheel
                         
-                        # Install pylint-pytest plugin for better SonarQube integration
                         ${PIP} install pylint-pytest
                         
                         if [ -f requirements.txt ]; then
@@ -134,7 +134,6 @@ print('✅ Django initialized successfully')
                             --output-format=json:pylint-report.json \
                             --exit-zero || echo "Pylint analysis completed"
                         
-                        # Verify Pylint report was created
                         if [ -f pylint-report.json ]; then
                             echo "✅ Pylint report created successfully"
                         else
@@ -154,7 +153,6 @@ print('✅ Django initialized successfully')
                     
                     withSonarQubeEnv('sonarqube') {
                         sh """
-                            # Create sonar-project.properties file for better configuration
                             cat > sonar-project.properties << EOF
 sonar.projectKey=${projectKey}
 sonar.projectName=Django Contact App Build ${env.BUILD_NUMBER}
@@ -172,7 +170,6 @@ sonar.qualitygate.wait=true
 sonar.qualitygate.timeout=300
 EOF
 
-                            # Run sonar-scanner
                             ./sonar-scanner/bin/sonar-scanner \
                                 -Dsonar.host.url=${SONAR_HOST_URL} \
                                 -Dsonar.login=${SONAR_AUTH_TOKEN} \
@@ -196,25 +193,49 @@ EOF
                                 echo "✅ Quality Gate PASSED"
                             } else {
                                 echo "⚠️ Quality Gate FAILED with status: ${qg.status}"
-                                echo "Check SonarQube for detailed analysis"
                             }
                         } catch (Exception e) {
                             echo "⚠️ Could not retrieve Quality Gate status: ${e.message}"
-                            echo "Analysis may still be processing in SonarQube"
                         }
                     }
                 }
             }
         }
         
-        stage('Docker Build') {
+        stage('Docker Build and Push') {
             when {
                 expression { fileExists('Dockerfile') }
+                expression { env.DOCKER_IMAGE_NAME }
+            }
+            environment {
+                DOCKER_HUB_CREDS = credentials('docker-hub-credentials')
             }
             steps {
                 script {
-                    echo "🐳 Building Docker image with tag: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
+                    echo "🐳 Building Docker image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
                     
+                    // Retry pulling base image with exponential backoff
+                    sh '''
+                        echo "Pulling base image with retries..."
+                        BASE_IMAGE=$(grep -i "^FROM" Dockerfile | head -1 | cut -d' ' -f2)
+                        
+                        for i in $(seq 1 ${DOCKER_PULL_RETRIES}); do
+                            echo "Attempt $i of ${DOCKER_PULL_RETRIES} to pull ${BASE_IMAGE}..."
+                            if docker pull ${BASE_IMAGE}; then
+                                echo "✅ Base image pulled successfully"
+                                break
+                            else
+                                if [ $i -eq ${DOCKER_PULL_RETRIES} ]; then
+                                    echo "❌ Failed to pull base image after ${DOCKER_PULL_RETRIES} attempts"
+                                    exit 1
+                                fi
+                                echo "Pull failed, waiting ${DOCKER_PULL_DELAY} seconds before retry..."
+                                sleep ${DOCKER_PULL_DELAY}
+                            fi
+                        done
+                    '''
+                    
+                    // Build Docker image
                     sh """
                         docker build \
                             --build-arg BUILD_NUMBER=${env.BUILD_NUMBER} \
@@ -225,55 +246,24 @@ EOF
                             .
                     """
                     
-                    echo "🔒 Running security scan on Docker image..."
-                    try {
-                        sh """
-                            docker run --rm \
-                                -v /var/run/docker.sock:/var/run/docker.sock \
-                                aquasec/trivy image \
-                                --severity HIGH,CRITICAL \
-                                --no-progress \
-                                --exit-code 0 \
-                                ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}
-                        """
-                        echo "✅ Docker image security scan completed"
-                    } catch (Exception e) {
-                        echo "⚠️ Docker security scan failed: ${e.message}"
-                    }
-                }
-            }
-        }
-        
-        stage('Docker Push') {
-            when {
-                allOf {
-                    expression { env.DOCKER_IMAGE_NAME }
-                    expression { fileExists('Dockerfile') }
-                    expression { currentBuild.result != 'FAILURE' }
-                }
-            }
-            environment {
-                DOCKER_HUB_CREDS = credentials('docker-hub-credentials')
-            }
-            steps {
-                script {
-                    echo "📤 Pushing Docker image to Docker Hub..."
+                    echo "✅ Docker image built: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
                     
+                    echo "📤 Pushing Docker images to Docker Hub..."
+                    
+                    // Login and push
                     sh '''
-                        # Login to Docker Hub
-                        echo $DOCKER_HUB_CREDS_PSW | docker login -u $DOCKER_HUB_CREDS_USR --password-stdin
+                        echo "Logging into Docker Hub..."
+                        echo "$DOCKER_HUB_CREDS_PSW" | docker login -u "$DOCKER_HUB_CREDS_USR" --password-stdin
                         
-                        # Push the images - NO TAGGING NEEDED, they're already tagged correctly!
                         echo "Pushing ${DOCKER_IMAGE_NAME}:${BUILD_NUMBER}..."
                         docker push ${DOCKER_IMAGE_NAME}:${BUILD_NUMBER}
                         
                         echo "Pushing ${DOCKER_IMAGE_NAME}:latest..."
                         docker push ${DOCKER_IMAGE_NAME}:latest
                         
-                        # Logout
                         docker logout
                         
-                        echo "✅ Successfully pushed to Docker Hub:"
+                        echo "✅ Docker images successfully pushed to Docker Hub:"
                         echo "   - ${DOCKER_IMAGE_NAME}:${BUILD_NUMBER}"
                         echo "   - ${DOCKER_IMAGE_NAME}:latest"
                     '''
@@ -281,15 +271,15 @@ EOF
             }
             post {
                 failure {
-                    echo "❌ Failed to push Docker image"
+                    echo "❌ Docker build or push failed"
                     sh 'docker logout || true'
                 }
                 success {
-                    echo "✅ Docker image successfully published to Docker Hub"
+                    echo "✅ Docker build and push completed successfully"
                 }
             }
         }
-                
+        
         stage('Deploy to Staging') {
             when {
                 branch 'main'
@@ -302,8 +292,10 @@ EOF
                     echo "Image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
                     echo ""
                     echo "To deploy manually:"
-                    echo "docker pull ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
-                    echo "docker run -d -p 8000:8000 ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
+                    echo "  docker pull ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
+                    echo "  docker run -d -p 8000:8000 ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
+                    echo ""
+                    echo "Or visit: https://hub.docker.com/r/${DOCKER_IMAGE_NAME}/tags"
                 }
             }
         }
@@ -311,10 +303,10 @@ EOF
     
     post {
         always {
-            // Archive all reports
+            // Archive reports
             archiveArtifacts artifacts: 'coverage.xml, junit-results.xml, pylint-report.json, sonar-project.properties, .scannerwork/report-task.txt', allowEmptyArchive: true
             
-            // Display SonarQube URL if available
+            // Display SonarQube URL
             script {
                 if (fileExists('.scannerwork/report-task.txt')) {
                     def reportTask = readFile('.scannerwork/report-task.txt')

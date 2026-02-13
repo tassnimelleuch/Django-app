@@ -12,7 +12,6 @@ from accounts.models import Contact, PhoneNumber
 User = get_user_model()
 
 
-# ===== CONTACT MODEL TESTS =====
 
 @pytest.mark.django_db
 def test_contact_creation_minimal():

@@ -288,14 +288,54 @@ EOF
             }
             steps {
                 script {
-                    echo "🚀 Ready to deploy Docker image to staging environment..."
-                    echo "Image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
-                    echo ""
-                    echo "To deploy manually:"
-                    echo "  docker pull ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
-                    echo "  docker run -d -p 8000:8000 ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
-                    echo ""
-                    echo "Or visit: https://hub.docker.com/r/${DOCKER_IMAGE_NAME}/tags"
+                    echo "🚀 Deploying to staging environment..."
+                    
+                    sh """
+                        # Pull the latest image
+                        echo "Pulling image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
+                        docker pull ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}
+                        
+                        # Stop and remove old container
+                        echo "Stopping existing container..."
+                        docker stop django-staging || true
+                        docker rm django-staging || true
+                        
+                        # Run new container
+                        echo "Starting new container..."
+                        docker run -d \
+                            --name django-staging \
+                            -p 8000:8000 \
+                            -e DJANGO_ENV=staging \
+                            -e SECRET_KEY=${SECRET_KEY} \
+                            --restart unless-stopped \
+                            ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}
+                        
+                        # Wait for container to start
+                        sleep 5
+                        
+                        # Check if container is running
+                        if [ "\$(docker ps -q -f name=django-staging)" ]; then
+                            echo "✅ Container is running!"
+                            echo "📋 Container logs:"
+                            docker logs --tail 20 django-staging
+                            echo ""
+                            echo "🌐 Application is available at: http://localhost:8000"
+                        else
+                            echo "❌ Container failed to start"
+                            echo "📋 Last logs:"
+                            docker logs django-staging
+                            exit 1
+                        fi
+                    """
+                }
+            }
+            post {
+                failure {
+                    echo "❌ Failed to deploy to staging"
+                    sh 'docker logs django-staging || true'
+                }
+                success {
+                    echo "✅ Successfully deployed to staging environment"
                 }
             }
         }
@@ -323,7 +363,10 @@ EOF
                 }
             }
             
-            // Cleanup
+            // Don't cleanup the container, keep it running!
+            echo "✅ Staging container 'django-staging' is still running"
+            
+            // Cleanup only build artifacts
             sh '''
                 rm -rf ${VENV_DIR} || true
                 rm -f coverage.xml junit-results.xml pylint-report.json || true
@@ -335,6 +378,7 @@ EOF
         success {
             echo "✅✅✅ PIPELINE SUCCESSFUL! ✅✅✅"
             echo "Docker image: ${env.DOCKER_IMAGE_NAME}:${env.DOCKER_IMAGE_TAG}"
+            echo "Staging URL: http://localhost:8000"
             echo "View on Docker Hub: https://hub.docker.com/r/${env.DOCKER_IMAGE_NAME}/tags"
         }
         

@@ -153,30 +153,35 @@ print('✅ Django initialized successfully')
         stage('SonarQube Analysis') {
             steps {
                 script {
-                    // Use date-based project key
+                    // Create clean date-based project key WITHOUT parentheses
                     def dateTag = sh(script: '''date "+%Y%m%d-%H%M%S"''', returnStdout: true).trim()
-                    def projectKey = "django-app-${dateTag} (#${env.BUILD_NUMBER})"
+                    
+                    // SonarQube project key - NO spaces or parentheses allowed
+                    def projectKey = "django-app-${dateTag}-build-${env.BUILD_NUMBER}"
+                    
+                    // Keep the parentheses ONLY in the display name, NOT in the key
+                    def projectName = "Django Contact App Build ${dateTag} (#${env.BUILD_NUMBER})"
                     
                     echo "📊 Running SonarQube analysis for project: ${projectKey}"
                     
                     withSonarQubeEnv('sonarqube') {
                         sh """
                             cat > sonar-project.properties << EOF
-sonar.projectKey=${projectKey}
-sonar.projectName=Django Contact App Build ${dateTag} (#${env.BUILD_NUMBER})
-sonar.projectVersion=${dateTag} (#${env.BUILD_NUMBER})
-sonar.sources=.
-sonar.exclusions=**/migrations/**,**/__pycache__/**,**/*.pyc,venv/**,**/.git/**,coverage.xml,junit-results.xml,pylint-report.json
-sonar.tests=.
-sonar.test.inclusions=**/test*.py,**/tests/**
-sonar.python.coverage.reportPaths=coverage.xml
-sonar.python.xunit.reportPath=junit-results.xml
-sonar.python.pylint.reportPaths=pylint-report.json
-sonar.python.version=3
-sonar.sourceEncoding=UTF-8
-sonar.qualitygate.wait=true
-sonar.qualitygate.timeout=300
-EOF
+        sonar.projectKey=${projectKey}
+        sonar.projectName=${projectName}
+        sonar.projectVersion=${dateTag}
+        sonar.sources=.
+        sonar.exclusions=**/migrations/**,**/__pycache__/**,**/*.pyc,venv/**,**/.git/**,coverage.xml,junit-results.xml,pylint-report.json
+        sonar.tests=.
+        sonar.test.inclusions=**/test*.py,**/tests/**
+        sonar.python.coverage.reportPaths=coverage.xml
+        sonar.python.xunit.reportPath=junit-results.xml
+        sonar.python.pylint.reportPaths=pylint-report.json
+        sonar.python.version=3
+        sonar.sourceEncoding=UTF-8
+        sonar.qualitygate.wait=true
+        sonar.qualitygate.timeout=300
+        EOF
 
                             ./sonar-scanner/bin/sonar-scanner \
                                 -Dsonar.host.url=${SONAR_HOST_URL} \

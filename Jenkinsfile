@@ -140,47 +140,42 @@ print('✅ Django initialized successfully')
         stage('SonarQube Analysis') {
             steps {
                 script {
-                    // For SonarQube: use date without 'at' for cleaner key
                     def dateKey = sh(script: '''#!/bin/bash
                         export LANG=C
                         date "+%Y-%m-%d-%H-%M-%S"
                     ''', returnStdout: true).trim()
                     
                     def projectKey = "django-app-${dateKey}-build-${env.BUILD_NUMBER}"
-                    // USER FRIENDLY: Shows exactly like "Django Contact App 2026-02-16-at-10-17-27 (#62)"
                     def projectName = "Django Contact App ${dateKey} (#${env.BUILD_NUMBER})"
                     
                     echo "📊 Running SonarQube analysis for: ${projectName}"
                     
                     withSonarQubeEnv('sonarqube') {
+                        // ACTUALLY RUN the scanner, not just create properties file
                         sh """
-                                                        cat > sonar-project.properties << EOF
-                            sonar.projectKey=${projectKey}
-                            sonar.projectName=${projectName}
-                            sonar.projectVersion=${dateKey}
-                            sonar.sources=.
-                            sonar.exclusions=**/migrations/**,**/__pycache__/**,**/*.pyc,venv/**,**/.git/**,coverage.xml,junit-results.xml,pylint-report.json
-                            sonar.tests=.
-                            sonar.test.inclusions=**/test*.py,**/tests/**
-                            sonar.python.coverage.reportPaths=coverage.xml
-                            sonar.python.xunit.reportPath=junit-results.xml
-                            sonar.python.pylint.reportPaths=pylint-report.json
-                            sonar.python.version=3
-                            sonar.sourceEncoding=UTF-8
-                            sonar.qualitygate.wait=true
-                            sonar.qualitygate.timeout=300
-                            EOF
-
-                            ./sonar-scanner/bin/sonar-scanner \
-                                -Dsonar.host.url=${SONAR_HOST_URL} \
-                                -Dsonar.login=${SONAR_AUTH_TOKEN} \
-                                -Dproject.settings=sonar-project.properties
+                            sonar-scanner \
+                                -Dsonar.projectKey=${projectKey} \
+                                -Dsonar.projectName="${projectName}" \
+                                -Dsonar.projectVersion=${dateKey} \
+                                -Dsonar.sources=. \
+                                -Dsonar.exclusions=**/migrations/**,**/__pycache__/**,**/*.pyc,venv/**,**/.git/**,coverage.xml,junit-results.xml,pylint-report.json \
+                                -Dsonar.tests=. \
+                                -Dsonar.test.inclusions=**/test*.py,**/tests/** \
+                                -Dsonar.python.coverage.reportPaths=coverage.xml \
+                                -Dsonar.python.xunit.reportPath=junit-results.xml \
+                                -Dsonar.python.pylint.reportPaths=pylint-report.json \
+                                -Dsonar.python.version=3 \
+                                -Dsonar.sourceEncoding=UTF-8 \
+                                -Dsonar.qualitygate.wait=true \
+                                -Dsonar.qualitygate.timeout=300
                         """
                     }
+                    
+                    // Save the project key for later use
+                    env.SONAR_PROJECT_KEY = projectKey
                 }
             }
         }
-        
         stage('Quality Gate Check') {
             steps {
                 script {

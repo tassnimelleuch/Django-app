@@ -145,51 +145,49 @@ print('✅ Django initialized successfully')
         }
         
         stage('SonarCloud Analysis') {
-            steps {
-                script {
-                    def dateKey = sh(script: '''#!/bin/bash
-                        export LANG=C
-                        date "+%Y-%m-%d-%H-%M-%S"
-                    ''', returnStdout: true).trim()
-                    
-                    def projectKey = "django-contact-app-${dateKey}-build-${env.BUILD_NUMBER}"
-                    def projectName = "Django Contact App ${dateKey} (#${env.BUILD_NUMBER})"
-                    
-                    echo "📊 Running SonarCloud analysis for: ${projectName}"
-                    echo "🔗 Will be available at: https://sonarcloud.io/project/overview?id=${projectKey}"
-                    
-                    withSonarQubeEnv('sonarcloud') {  // Configure this in Jenkins
-                        // Get scanner home and add to PATH
-                        def scannerHome = tool name: 'SonarScanner', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
-                        
-                        withEnv(["PATH+SCANNER=${scannerHome}/bin"]) {
-                            withCredentials([string(credentialsId: 'sonar-cloud', variable: 'SONAR_TOKEN')]) {
-                                sh """
-                                    sonar-scanner \
-                                        -Dsonar.projectKey=${projectKey} \
-                                        -Dsonar.organization=${SONAR_ORGANIZATION} \
-                                        -Dsonar.projectName="${projectName}" \
-                                        -Dsonar.projectVersion=${dateKey} \
-                                        -Dsonar.sources=. \
-                                        -Dsonar.exclusions=**/migrations/**,**/__pycache__/**,**/*.pyc,venv/**,**/.git/**,coverage.xml,junit-results.xml,pylint-report.json \
-                                        -Dsonar.tests=. \
-                                        -Dsonar.test.inclusions=**/test*.py,**/tests/** \
-                                        -Dsonar.python.coverage.reportPaths=coverage.xml \
-                                        -Dsonar.python.xunit.reportPath=junit-results.xml \
-                                        -Dsonar.python.pylint.reportPaths=pylint-report.json \
-                                        -Dsonar.python.version=3 \
-                                        -Dsonar.sourceEncoding=UTF-8 \
-                                        -Dsonar.host.url=https://sonarcloud.io \
-                                        -Dsonar.login=${SONAR_TOKEN} \
-                                        -Dsonar.qualitygate.wait=true \
-                                        -Dsonar.qualitygate.timeout=300
-                                """
-                            }
-                        }
+    steps {
+        script {
+            def dateKey = sh(script: '''#!/bin/bash
+                export LANG=C
+                date "+%Y-%m-%d-%H-%M-%S"
+            ''', returnStdout: true).trim()
+            
+            def projectKey = "django-contact-app-${dateKey}-build-${env.BUILD_NUMBER}"
+            def projectName = "Django Contact App ${dateKey} (#${env.BUILD_NUMBER})"
+            
+            echo "📊 Running SonarCloud analysis for: ${projectName}"
+            
+            withSonarQubeEnv('sonarcloud') {
+                def scannerHome = tool name: 'SonarScanner', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
+                
+                withEnv(["PATH+SCANNER=${scannerHome}/bin"]) {
+                    withCredentials([string(credentialsId: 'sonar-cloud', variable: 'SONAR_TOKEN')]) {
+                        sh """
+                            sonar-scanner \
+                                -Dsonar.projectKey=${projectKey} \
+                                -Dsonar.organization=tassnimelleuch \
+                                -Dsonar.projectName="${projectName}" \
+                                -Dsonar.projectVersion=${dateKey} \
+                                -Dsonar.sources=. \
+                                -Dsonar.exclusions=**/migrations/**,**/__pycache__/**,**/*.pyc,venv/**,**/.git/**,coverage.xml,junit-results.xml,pylint-report.json \
+                                -Dsonar.tests=. \
+                                -Dsonar.test.inclusions=**/test*.py,**/tests/** \
+                                -Dsonar.python.coverage.reportPaths=coverage.xml \
+                                -Dsonar.python.xunit.reportPath=junit-results.xml \
+                                -Dsonar.python.pylint.reportPaths=pylint-report.json \
+                                -Dsonar.python.version=3 \
+                                -Dsonar.sourceEncoding=UTF-8 \
+                                -Dsonar.host.url=https://sonarcloud.io \
+                                -Dsonar.token=\${SONAR_TOKEN} \
+                                -Dsonar.qualitygate.wait=true \
+                                -Dsonar.qualitygate.timeout=300
+                        """
                     }
                 }
             }
         }
+    }
+} 
         
         stage('Quality Gate Check') {
             steps {

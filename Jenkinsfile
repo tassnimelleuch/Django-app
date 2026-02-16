@@ -258,7 +258,6 @@ EOF
                     
                     echo "📤 Pushing Docker images to Docker Hub..."
                     
-                    // Login and push
                     sh '''
                         echo "Logging into Docker Hub..."
                         echo "$DOCKER_HUB_CREDS_PSW" | docker login -u "$DOCKER_HUB_CREDS_USR" --password-stdin

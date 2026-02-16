@@ -151,7 +151,7 @@ print('✅ Django initialized successfully')
                     echo "📊 Running SonarQube analysis for: ${projectName}"
                     
                     withSonarQubeEnv('sonarqube') {
-                        // ACTUALLY RUN the scanner, not just create properties file
+                        // FIXED: Added server URL and token parameters
                         sh """
                             sonar-scanner \
                                 -Dsonar.projectKey=${projectKey} \
@@ -166,13 +166,21 @@ print('✅ Django initialized successfully')
                                 -Dsonar.python.pylint.reportPaths=pylint-report.json \
                                 -Dsonar.python.version=3 \
                                 -Dsonar.sourceEncoding=UTF-8 \
+                                -Dsonar.host.url=${SONAR_HOST_URL} \
+                                -Dsonar.login=${SONAR_AUTH_TOKEN} \
                                 -Dsonar.qualitygate.wait=true \
                                 -Dsonar.qualitygate.timeout=300
                         """
                     }
                     
-                    // Save the project key for later use
-                    env.SONAR_PROJECT_KEY = projectKey
+                    script {
+                        if (fileExists('.scannerwork/report-task.txt')) {
+                            def reportTask = readFile('.scannerwork/report-task.txt')
+                            def dashboardUrl = (reportTask =~ /dashboardUrl=(.*)/)[0][1]
+                            echo "✅ SonarQube project created: ${dashboardUrl}"
+                            env.SONAR_PROJECT_URL = dashboardUrl
+                        }
+                    }
                 }
             }
         }

@@ -21,7 +21,7 @@ pipeline {
         // CLEAN FORMAT: 2026-02-16-at-10-17-27-62 (Docker-safe: only lowercase, numbers, hyphens)
         DOCKER_IMAGE_TAG = sh(script: '''#!/bin/bash
             export LANG=C
-            date "+%Y-%m-%d-at-%H-%M-%S-${BUILD_NUMBER}" | tr '[:upper:]' '[:lower:]' | sed 's/ /-/g'
+            date "+%Y-%m-%d-at-%H-%M-%S-build-${BUILD_NUMBER}" | tr '[:upper:]' '[:lower:]' | sed 's/ /-/g'
         ''', returnStdout: true).trim()
         
         // For display purposes only (not used in tags)

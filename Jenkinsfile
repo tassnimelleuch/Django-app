@@ -35,6 +35,10 @@ pipeline {
         DOCKER_PUSH_RETRIES = '5'         // Max push retries
         DOCKER_PUSH_DELAY = '15'          // Delay between push retries
         DOCKER_PUSH_TIMEOUT = '300'       // 5 minutes per push attempt
+        
+        // SonarCloud configuration
+        SONAR_ORGANIZATION = 'tasnimelleuchenis'  // Replace with your GitHub username/organization
+        SONAR_PROJECT_KEY = "django-contact-app-${BUILD_NUMBER}"
     }
     
     stages {
@@ -140,7 +144,7 @@ print('✅ Django initialized successfully')
             }
         }
         
-        stage('SonarQube Analysis') {
+        stage('SonarCloud Analysis') {
             steps {
                 script {
                     def dateKey = sh(script: '''#!/bin/bash
@@ -148,35 +152,39 @@ print('✅ Django initialized successfully')
                         date "+%Y-%m-%d-%H-%M-%S"
                     ''', returnStdout: true).trim()
                     
-                    def projectKey = "django-app-${dateKey}-build-${env.BUILD_NUMBER}"
+                    def projectKey = "django-contact-app-${dateKey}-build-${env.BUILD_NUMBER}"
                     def projectName = "Django Contact App ${dateKey} (#${env.BUILD_NUMBER})"
                     
-                    echo "📊 Running SonarQube analysis for: ${projectName}"
+                    echo "📊 Running SonarCloud analysis for: ${projectName}"
+                    echo "🔗 Will be available at: https://sonarcloud.io/project/overview?id=${projectKey}"
                     
-                    withSonarQubeEnv('sonarqube') {
+                    withSonarQubeEnv('sonarcloud') {  // Configure this in Jenkins
                         // Get scanner home and add to PATH
                         def scannerHome = tool name: 'SonarScanner', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
                         
                         withEnv(["PATH+SCANNER=${scannerHome}/bin"]) {
-                            sh """
-                                sonar-scanner \
-                                    -Dsonar.projectKey=${projectKey} \
-                                    -Dsonar.projectName="${projectName}" \
-                                    -Dsonar.projectVersion=${dateKey} \
-                                    -Dsonar.sources=. \
-                                    -Dsonar.exclusions=**/migrations/**,**/__pycache__/**,**/*.pyc,venv/**,**/.git/**,coverage.xml,junit-results.xml,pylint-report.json \
-                                    -Dsonar.tests=. \
-                                    -Dsonar.test.inclusions=**/test*.py,**/tests/** \
-                                    -Dsonar.python.coverage.reportPaths=coverage.xml \
-                                    -Dsonar.python.xunit.reportPath=junit-results.xml \
-                                    -Dsonar.python.pylint.reportPaths=pylint-report.json \
-                                    -Dsonar.python.version=3 \
-                                    -Dsonar.sourceEncoding=UTF-8 \
-                                    -Dsonar.host.url=${SONAR_HOST_URL} \
-                                    -Dsonar.login=${SONAR_AUTH_TOKEN} \
-                                    -Dsonar.qualitygate.wait=true \
-                                    -Dsonar.qualitygate.timeout=300
-                            """
+                            withCredentials([string(credentialsId: 'sonarcloud-token', variable: 'SONAR_TOKEN')]) {
+                                sh """
+                                    sonar-scanner \
+                                        -Dsonar.projectKey=${projectKey} \
+                                        -Dsonar.organization=${SONAR_ORGANIZATION} \
+                                        -Dsonar.projectName="${projectName}" \
+                                        -Dsonar.projectVersion=${dateKey} \
+                                        -Dsonar.sources=. \
+                                        -Dsonar.exclusions=**/migrations/**,**/__pycache__/**,**/*.pyc,venv/**,**/.git/**,coverage.xml,junit-results.xml,pylint-report.json \
+                                        -Dsonar.tests=. \
+                                        -Dsonar.test.inclusions=**/test*.py,**/tests/** \
+                                        -Dsonar.python.coverage.reportPaths=coverage.xml \
+                                        -Dsonar.python.xunit.reportPath=junit-results.xml \
+                                        -Dsonar.python.pylint.reportPaths=pylint-report.json \
+                                        -Dsonar.python.version=3 \
+                                        -Dsonar.sourceEncoding=UTF-8 \
+                                        -Dsonar.host.url=https://sonarcloud.io \
+                                        -Dsonar.login=${SONAR_TOKEN} \
+                                        -Dsonar.qualitygate.wait=true \
+                                        -Dsonar.qualitygate.timeout=300
+                                """
+                            }
                         }
                     }
                 }
@@ -186,7 +194,7 @@ print('✅ Django initialized successfully')
         stage('Quality Gate Check') {
             steps {
                 script {
-                    echo "🔍 Checking SonarQube Quality Gate..."
+                    echo "🔍 Checking SonarCloud Quality Gate..."
                     
                     timeout(time: 5, unit: 'MINUTES') {
                         try {
@@ -333,7 +341,7 @@ print('✅ Django initialized successfully')
                     
                     def dashboardUrl = extractValue('dashboardUrl')
                     if (dashboardUrl) {
-                        echo "SonarQube Analysis URL: ${dashboardUrl}"
+                        echo "SonarCloud Analysis URL: ${dashboardUrl}"
                         echo "Project: Django Contact App ${HUMAN_READABLE_DATE} (#${BUILD_NUMBER})"
                     }
                 }
@@ -351,8 +359,9 @@ print('✅ Django initialized successfully')
             echo "✅✅✅ PIPELINE SUCCESSFUL! ✅✅✅"
             echo "📅 Build: ${HUMAN_READABLE_DATE} (#${BUILD_NUMBER})"
             echo "🐳 Docker image: ${env.DOCKER_IMAGE_NAME}:${env.DOCKER_IMAGE_TAG}"
-            echo "🔍 SonarQube: Django Contact App ${HUMAN_READABLE_DATE} (#${BUILD_NUMBER})"
+            echo "☁️ SonarCloud: Django Contact App ${HUMAN_READABLE_DATE} (#${BUILD_NUMBER})"
             echo "📦 View on Docker Hub: https://hub.docker.com/r/${env.DOCKER_IMAGE_NAME}/tags"
+            echo "📊 View on SonarCloud: https://sonarcloud.io/project/overview?id=django-contact-app-${env.BUILD_NUMBER}"
         }
         
         failure {

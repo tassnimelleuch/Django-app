@@ -47,26 +47,6 @@ pipeline {
             }
         }
         
-        stage('Install SonarScanner') {
-            steps {
-                script {
-                    echo "📦 Installing SonarScanner..."
-                    
-                    sh '''
-                        if [ ! -d "sonar-scanner" ]; then
-                            wget -q https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip
-                            unzip -q sonar-scanner-cli-*.zip
-                            rm sonar-scanner-cli-*.zip
-                            mv sonar-scanner-* sonar-scanner
-                        fi
-                        
-                        ./sonar-scanner/bin/sonar-scanner --version
-                        echo "✅ SonarScanner ready"
-                    '''
-                }
-            }
-        }
-        
         stage('Create Virtual Environment') {
             steps {
                 script {
@@ -174,22 +154,22 @@ print('✅ Django initialized successfully')
                     
                     withSonarQubeEnv('sonarqube') {
                         sh """
-                            cat > sonar-project.properties << EOF
-sonar.projectKey=${projectKey}
-sonar.projectName=${projectName}
-sonar.projectVersion=${dateKey}
-sonar.sources=.
-sonar.exclusions=**/migrations/**,**/__pycache__/**,**/*.pyc,venv/**,**/.git/**,coverage.xml,junit-results.xml,pylint-report.json
-sonar.tests=.
-sonar.test.inclusions=**/test*.py,**/tests/**
-sonar.python.coverage.reportPaths=coverage.xml
-sonar.python.xunit.reportPath=junit-results.xml
-sonar.python.pylint.reportPaths=pylint-report.json
-sonar.python.version=3
-sonar.sourceEncoding=UTF-8
-sonar.qualitygate.wait=true
-sonar.qualitygate.timeout=300
-EOF
+                                                        cat > sonar-project.properties << EOF
+                            sonar.projectKey=${projectKey}
+                            sonar.projectName=${projectName}
+                            sonar.projectVersion=${dateKey}
+                            sonar.sources=.
+                            sonar.exclusions=**/migrations/**,**/__pycache__/**,**/*.pyc,venv/**,**/.git/**,coverage.xml,junit-results.xml,pylint-report.json
+                            sonar.tests=.
+                            sonar.test.inclusions=**/test*.py,**/tests/**
+                            sonar.python.coverage.reportPaths=coverage.xml
+                            sonar.python.xunit.reportPath=junit-results.xml
+                            sonar.python.pylint.reportPaths=pylint-report.json
+                            sonar.python.version=3
+                            sonar.sourceEncoding=UTF-8
+                            sonar.qualitygate.wait=true
+                            sonar.qualitygate.timeout=300
+                            EOF
 
                             ./sonar-scanner/bin/sonar-scanner \
                                 -Dsonar.host.url=${SONAR_HOST_URL} \

@@ -136,7 +136,6 @@ print('✅ Django initialized successfully')
                 }
             }
         }
-        
         stage('SonarQube Analysis') {
             steps {
                 script {
@@ -150,7 +149,11 @@ print('✅ Django initialized successfully')
                     
                     echo "📊 Running SonarQube analysis for: ${projectName}"
                     
+                    // FIX: Add tool name here
                     withSonarQubeEnv('sonarqube') {
+                        // Use the tool from Jenkins configuration
+                        tool name: 'SonarScanner', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
+                        
                         sh """
                             sonar-scanner \
                                 -Dsonar.projectKey=${projectKey} \
@@ -173,7 +176,8 @@ print('✅ Django initialized successfully')
                     }
                 }
             }
-}
+        }
+ 
         stage('Quality Gate Check') {
             steps {
                 script {

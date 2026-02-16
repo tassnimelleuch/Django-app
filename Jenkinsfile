@@ -17,8 +17,18 @@ pipeline {
         SECRET_KEY = sh(script: 'python3 -c "import secrets; print(secrets.token_urlsafe(50))"', returnStdout: true).trim()
         
         DOCKER_IMAGE_NAME = 'tasnimelleuchenis/django-contact-app'
-        // FIXED: Force English locale and use only valid Docker tag characters
-        DOCKER_IMAGE_TAG = sh(script: '''export LANG=C; date "+%b-%d-%Y-%H-%M-%S" | tr '[:upper:]' '[:lower:]' && echo -n "-#${BUILD_NUMBER}"''', returnStdout: true).trim().replace('\n', '')
+        
+        // CLEAN FORMAT: 2026-02-16-at-10-17-27-62 (Docker-safe: only lowercase, numbers, hyphens)
+        DOCKER_IMAGE_TAG = sh(script: '''#!/bin/bash
+            export LANG=C
+            date "+%Y-%m-%d-at-%H-%M-%S-${BUILD_NUMBER}" | tr '[:upper:]' '[:lower:]' | sed 's/ /-/g'
+        ''', returnStdout: true).trim()
+        
+        // For display purposes only (not used in tags)
+        HUMAN_READABLE_DATE = sh(script: '''#!/bin/bash
+            export LANG=C
+            date "+%Y-%m-%d at %H:%M:%S"
+        ''', returnStdout: true).trim()
         
         DOCKER_PULL_RETRIES = '3'
         DOCKER_PULL_DELAY = '5'
@@ -31,7 +41,8 @@ pipeline {
                 checkout scm
                 echo "✅ Workspace cleaned and code checked out"
                 script {
-                    echo "Build tag: ${env.DOCKER_IMAGE_TAG}"
+                    echo "🏷️ Build: ${HUMAN_READABLE_DATE} (#${BUILD_NUMBER})"
+                    echo "🐳 Docker tag: ${DOCKER_IMAGE_TAG}"
                 }
             }
         }
@@ -149,19 +160,24 @@ print('✅ Django initialized successfully')
         stage('SonarQube Analysis') {
             steps {
                 script {
-                    // FIXED: Create valid SonarQube project key (no spaces/parentheses)
-                    def dateTag = sh(script: '''date "+%Y%m%d-%H%M%S"''', returnStdout: true).trim()
-                    def projectKey = "django-app-${dateTag}-build-${env.BUILD_NUMBER}"
-                    def projectName = "Django Contact App ${dateTag} (#${env.BUILD_NUMBER})"
+                    // For SonarQube: use date without 'at' for cleaner key
+                    def dateKey = sh(script: '''#!/bin/bash
+                        export LANG=C
+                        date "+%Y-%m-%d-%H-%M-%S"
+                    ''', returnStdout: true).trim()
                     
-                    echo "📊 Running SonarQube analysis for project: ${projectKey}"
+                    def projectKey = "django-app-${dateKey}-build-${env.BUILD_NUMBER}"
+                    // USER FRIENDLY: Shows exactly like "Django Contact App 2026-02-16-at-10-17-27 (#62)"
+                    def projectName = "Django Contact App ${dateKey} (#${env.BUILD_NUMBER})"
+                    
+                    echo "📊 Running SonarQube analysis for: ${projectName}"
                     
                     withSonarQubeEnv('sonarqube') {
                         sh """
                             cat > sonar-project.properties << EOF
 sonar.projectKey=${projectKey}
 sonar.projectName=${projectName}
-sonar.projectVersion=${dateTag}
+sonar.projectVersion=${dateKey}
 sonar.sources=.
 sonar.exclusions=**/migrations/**,**/__pycache__/**,**/*.pyc,venv/**,**/.git/**,coverage.xml,junit-results.xml,pylint-report.json
 sonar.tests=.
@@ -218,6 +234,7 @@ EOF
             steps {
                 script {
                     echo "🐳 Building Docker image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
+                    echo "📅 Build: ${HUMAN_READABLE_DATE} (#${BUILD_NUMBER})"
                     
                     sh '''
                         echo "Pulling base image with retries..."
@@ -239,13 +256,14 @@ EOF
                         done
                     '''
                     
-                    // FIXED: Docker build with valid tag
+                    // Docker build with clean tag
                     sh """
                         docker build \
                             --build-arg BUILD_NUMBER=${env.BUILD_NUMBER} \
-                            --build-arg BUILD_DATE=\$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
-                            --build-arg VCS_REF=\$(git rev-parse --short HEAD) \
+                            --build-arg BUILD_DATE="\$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+                            --build-arg VCS_REF="\$(git rev-parse --short HEAD)" \
                             --build-arg BUILD_TAG="${env.DOCKER_IMAGE_TAG}" \
+                            --build-arg HUMAN_DATE="${env.HUMAN_READABLE_DATE}" \
                             -t ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG} \
                             -t ${DOCKER_IMAGE_NAME}:latest \
                             .
@@ -301,6 +319,7 @@ EOF
                     def dashboardUrl = extractValue('dashboardUrl')
                     if (dashboardUrl) {
                         echo "SonarQube Analysis URL: ${dashboardUrl}"
+                        echo "Project: Django Contact App ${HUMAN_READABLE_DATE} (#${BUILD_NUMBER})"
                     }
                 }
             }
@@ -315,17 +334,21 @@ EOF
         
         success {
             echo "✅✅✅ PIPELINE SUCCESSFUL! ✅✅✅"
-            echo "Docker image: ${env.DOCKER_IMAGE_NAME}:${env.DOCKER_IMAGE_TAG}"
-            echo "View on Docker Hub: https://hub.docker.com/r/${env.DOCKER_IMAGE_NAME}/tags"
+            echo "📅 Build: ${HUMAN_READABLE_DATE} (#${BUILD_NUMBER})"
+            echo "🐳 Docker image: ${env.DOCKER_IMAGE_NAME}:${env.DOCKER_IMAGE_TAG}"
+            echo "🔍 SonarQube: Django Contact App ${HUMAN_READABLE_DATE} (#${BUILD_NUMBER})"
+            echo "📦 View on Docker Hub: https://hub.docker.com/r/${env.DOCKER_IMAGE_NAME}/tags"
         }
         
         failure {
             echo "❌❌❌ PIPELINE FAILED ❌❌❌"
+            echo "📅 Build: ${HUMAN_READABLE_DATE} (#${BUILD_NUMBER})"
             echo "Check the logs above for details"
         }
         
         unstable {
             echo "⚠️⚠️⚠️ PIPELINE UNSTABLE ⚠️⚠️⚠️"
+            echo "📅 Build: ${HUMAN_READABLE_DATE} (#${BUILD_NUMBER})"
         }
     }
 }

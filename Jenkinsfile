@@ -3,7 +3,7 @@ pipeline {
     
     options {
         buildDiscarder(logRotator(numToKeepStr: '10'))
-        timeout(time: 30, unit: 'MINUTES')  // Increased timeout for Docker pushes
+        timeout(time: 30, unit: 'MINUTES')
     }
     
     environment {
@@ -18,27 +18,21 @@ pipeline {
         
         DOCKER_IMAGE_NAME = 'tasnimelleuchenis/django-contact-app'
         
-        // CLEAN FORMAT: 2026-02-16-at-10-17-27-62 (Docker-safe: only lowercase, numbers, hyphens)
         DOCKER_IMAGE_TAG = sh(script: '''#!/bin/bash
             export LANG=C
             date "+%Y-%m-%d-at-%H-%M-%S-build-${BUILD_NUMBER}" | tr '[:upper:]' '[:lower:]' | sed 's/ /-/g'
         ''', returnStdout: true).trim()
         
-        // For display purposes only (not used in tags)
         HUMAN_READABLE_DATE = sh(script: '''#!/bin/bash
             export LANG=C
             date "+%Y-%m-%d at %H:%M:%S"
         ''', returnStdout: true).trim()
         
-        DOCKER_PULL_RETRIES = '5'        // Increased retries
-        DOCKER_PULL_DELAY = '10'         // Increased delay
-        DOCKER_PUSH_RETRIES = '5'         // Max push retries
-        DOCKER_PUSH_DELAY = '15'          // Delay between push retries
-        DOCKER_PUSH_TIMEOUT = '300'       // 5 minutes per push attempt
-        
-        // SonarCloud configuration
-        SONAR_ORGANIZATION = 'tasnimelleuchenis'  // Replace with your GitHub username/organization
-        SONAR_PROJECT_KEY = "django-contact-app-${BUILD_NUMBER}"
+        DOCKER_PULL_RETRIES = '5'
+        DOCKER_PULL_DELAY = '10'
+        DOCKER_PUSH_RETRIES = '5'
+        DOCKER_PUSH_DELAY = '15'
+        DOCKER_PUSH_TIMEOUT = '300'
     }
     
     stages {
@@ -145,66 +139,83 @@ print('✅ Django initialized successfully')
         }
         
         stage('SonarCloud Analysis') {
-    steps {
-        script {
-            def dateKey = sh(script: '''#!/bin/bash
-                export LANG=C
-                date "+%Y-%m-%d-%H-%M-%S"
-            ''', returnStdout: true).trim()
-            
-            def projectKey = "django-contact-app-${dateKey}-build-${env.BUILD_NUMBER}"
-            def projectName = "Django Contact App ${dateKey} (#${env.BUILD_NUMBER})"
-            
-            echo "📊 Running SonarCloud analysis for: ${projectName}"
-            
-            withSonarQubeEnv('sonarcloud') {
-                def scannerHome = tool name: 'SonarScanner', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
-                
-                withEnv(["PATH+SCANNER=${scannerHome}/bin"]) {
-                    withCredentials([string(credentialsId: 'sonar-cloud', variable: 'SONAR_TOKEN')]) {
-                        sh """
-                            sonar-scanner \
-                                -Dsonar.projectKey=${projectKey} \
-                                -Dsonar.organization=tassnimelleuch \
-                                -Dsonar.projectName="${projectName}" \
-                                -Dsonar.projectVersion=${dateKey} \
-                                -Dsonar.sources=. \
-                                -Dsonar.exclusions=**/migrations/**,**/__pycache__/**,**/*.pyc,venv/**,**/.git/**,coverage.xml,junit-results.xml,pylint-report.json \
-                                -Dsonar.tests=. \
-                                -Dsonar.test.inclusions=**/test*.py,**/tests/** \
-                                -Dsonar.python.coverage.reportPaths=coverage.xml \
-                                -Dsonar.python.xunit.reportPath=junit-results.xml \
-                                -Dsonar.python.pylint.reportPaths=pylint-report.json \
-                                -Dsonar.python.version=3 \
-                                -Dsonar.sourceEncoding=UTF-8 \
-                                -Dsonar.host.url=https://sonarcloud.io \
-                                -Dsonar.token=\${SONAR_TOKEN} \
-                                -Dsonar.qualitygate.wait=true \
-                                -Dsonar.qualitygate.timeout=300
-                        """
+            steps {
+                script {
+                    def dateKey = sh(script: '''#!/bin/bash
+                        export LANG=C
+                        date "+%Y-%m-%d-%H-%M-%S"
+                    ''', returnStdout: true).trim()
+                    
+                    def projectKey = "django-contact-app-${dateKey}-build-${env.BUILD_NUMBER}"
+                    def projectName = "Django Contact App ${dateKey} (#${env.BUILD_NUMBER})"
+                    
+                    echo "📊 Running SonarCloud analysis for: ${projectName}"
+                    echo "🔗 View results at: https://sonarcloud.io/dashboard?id=${projectKey}"
+                    
+                    withSonarQubeEnv('sonarcloud') {
+                        def scannerHome = tool name: 'SonarScanner', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
+                        
+                        withEnv(["PATH+SCANNER=${scannerHome}/bin"]) {
+                            withCredentials([string(credentialsId: 'sonar-cloud', variable: 'SONAR_TOKEN')]) {
+                                sh """
+                                    sonar-scanner \
+                                        -Dsonar.projectKey=${projectKey} \
+                                        -Dsonar.organization=tassnimelleuch \
+                                        -Dsonar.projectName="${projectName}" \
+                                        -Dsonar.projectVersion=${dateKey} \
+                                        -Dsonar.sources=. \
+                                        -Dsonar.exclusions=**/migrations/**,**/__pycache__/**,**/*.pyc,venv/**,**/.git/**,coverage.xml,junit-results.xml,pylint-report.json \
+                                        -Dsonar.tests=. \
+                                        -Dsonar.test.inclusions=**/test*.py,**/tests/** \
+                                        -Dsonar.python.coverage.reportPaths=coverage.xml \
+                                        -Dsonar.python.xunit.reportPath=junit-results.xml \
+                                        -Dsonar.python.pylint.reportPaths=pylint-report.json \
+                                        -Dsonar.python.version=3 \
+                                        -Dsonar.sourceEncoding=UTF-8 \
+                                        -Dsonar.host.url=https://sonarcloud.io \
+                                        -Dsonar.token=\${SONAR_TOKEN}
+                                """
+                            }
+                        }
                     }
+                    
+                    // Save the project key for later stages
+                    env.SONAR_PROJECT_KEY = projectKey
                 }
             }
         }
-    }
-} 
         
         stage('Quality Gate Check') {
             steps {
                 script {
                     echo "🔍 Checking SonarCloud Quality Gate..."
+                    echo "⏳ Waiting for SonarCloud to process analysis (this may take 10-30 seconds)..."
                     
-                    timeout(time: 5, unit: 'MINUTES') {
+                    // Give SonarCloud time to process
+                    sleep(time: 15, unit: 'SECONDS')
+                    
+                    timeout(time: 3, unit: 'MINUTES') {
                         try {
                             def qg = waitForQualityGate(abortPipeline: false)
                             
                             if (qg.status == 'OK') {
-                                echo "✅ Quality Gate PASSED"
+                                echo "✅✅✅ QUALITY GATE PASSED! ✅✅✅"
+                            } else if (qg.status == 'WARN') {
+                                echo "⚠️⚠️⚠️ QUALITY GATE WARNING ⚠️⚠️⚠️"
+                                echo "Status: ${qg.status}"
+                            } else if (qg.status == 'ERROR') {
+                                echo "❌❌❌ QUALITY GATE FAILED ❌❌❌"
+                                echo "Status: ${qg.status}"
                             } else {
-                                echo "⚠️ Quality Gate FAILED with status: ${qg.status}"
+                                echo "ℹ️ Quality Gate status: ${qg.status}"
                             }
+                            
+                            echo "🔗 View detailed results: https://sonarcloud.io/dashboard?id=${env.SONAR_PROJECT_KEY}"
+                            
                         } catch (Exception e) {
                             echo "⚠️ Could not retrieve Quality Gate status: ${e.message}"
+                            echo "ℹ️ This is often because SonarCloud is still processing or the task ID wasn't found."
+                            echo "🔗 Check manually at: https://sonarcloud.io/dashboard?id=${env.SONAR_PROJECT_KEY}"
                         }
                     }
                 }
@@ -339,9 +350,12 @@ print('✅ Django initialized successfully')
                     
                     def dashboardUrl = extractValue('dashboardUrl')
                     if (dashboardUrl) {
-                        echo "SonarCloud Analysis URL: ${dashboardUrl}"
-                        echo "Project: Django Contact App ${HUMAN_READABLE_DATE} (#${BUILD_NUMBER})"
+                        echo "☁️ SonarCloud Analysis URL: ${dashboardUrl}"
+                        echo "📊 Project: Django Contact App ${HUMAN_READABLE_DATE} (#${BUILD_NUMBER})"
                     }
+                } else {
+                    echo "⚠️ SonarCloud report file not found. Analysis may still be processing."
+                    echo "🔗 Check manually at: https://sonarcloud.io/dashboard?id=django-contact-app-${BUILD_NUMBER}"
                 }
             }
             
@@ -350,7 +364,7 @@ print('✅ Django initialized successfully')
                 rm -f coverage.xml junit-results.xml pylint-report.json || true
             '''
             
-            echo "Pipeline execution completed"
+            echo "✅ Pipeline execution completed"
         }
         
         success {
@@ -359,18 +373,20 @@ print('✅ Django initialized successfully')
             echo "🐳 Docker image: ${env.DOCKER_IMAGE_NAME}:${env.DOCKER_IMAGE_TAG}"
             echo "☁️ SonarCloud: Django Contact App ${HUMAN_READABLE_DATE} (#${BUILD_NUMBER})"
             echo "📦 View on Docker Hub: https://hub.docker.com/r/${env.DOCKER_IMAGE_NAME}/tags"
-            echo "📊 View on SonarCloud: https://sonarcloud.io/project/overview?id=django-contact-app-${env.BUILD_NUMBER}"
+            echo "📊 View on SonarCloud: https://sonarcloud.io/dashboard?id=django-contact-app-${BUILD_NUMBER}"
         }
         
         failure {
             echo "❌❌❌ PIPELINE FAILED ❌❌❌"
             echo "📅 Build: ${HUMAN_READABLE_DATE} (#${BUILD_NUMBER})"
+            echo "📊 SonarCloud results (if any): https://sonarcloud.io/dashboard?id=django-contact-app-${BUILD_NUMBER}"
             echo "Check the logs above for details"
         }
         
         unstable {
             echo "⚠️⚠️⚠️ PIPELINE UNSTABLE ⚠️⚠️⚠️"
             echo "📅 Build: ${HUMAN_READABLE_DATE} (#${BUILD_NUMBER})"
+            echo "📊 SonarCloud results: https://sonarcloud.io/dashboard?id=django-contact-app-${BUILD_NUMBER}"
         }
     }
 }

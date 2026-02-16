@@ -150,35 +150,28 @@ print('✅ Django initialized successfully')
                     
                     echo "📊 Running SonarQube analysis for: ${projectName}"
                     
+                    // FIX: Wrap with tool name
                     withSonarQubeEnv('sonarqube') {
-                        // FIXED: Added server URL and token parameters
-                        sh """
-                            sonar-scanner \
-                                -Dsonar.projectKey=${projectKey} \
-                                -Dsonar.projectName="${projectName}" \
-                                -Dsonar.projectVersion=${dateKey} \
-                                -Dsonar.sources=. \
-                                -Dsonar.exclusions=**/migrations/**,**/__pycache__/**,**/*.pyc,venv/**,**/.git/**,coverage.xml,junit-results.xml,pylint-report.json \
-                                -Dsonar.tests=. \
-                                -Dsonar.test.inclusions=**/test*.py,**/tests/** \
-                                -Dsonar.python.coverage.reportPaths=coverage.xml \
-                                -Dsonar.python.xunit.reportPath=junit-results.xml \
-                                -Dsonar.python.pylint.reportPaths=pylint-report.json \
-                                -Dsonar.python.version=3 \
-                                -Dsonar.sourceEncoding=UTF-8 \
-                                -Dsonar.host.url=${SONAR_HOST_URL} \
-                                -Dsonar.login=${SONAR_AUTH_TOKEN} \
-                                -Dsonar.qualitygate.wait=true \
-                                -Dsonar.qualitygate.timeout=300
-                        """
-                    }
-                    
-                    script {
-                        if (fileExists('.scannerwork/report-task.txt')) {
-                            def reportTask = readFile('.scannerwork/report-task.txt')
-                            def dashboardUrl = (reportTask =~ /dashboardUrl=(.*)/)[0][1]
-                            echo "✅ SonarQube project created: ${dashboardUrl}"
-                            env.SONAR_PROJECT_URL = dashboardUrl
+                        tool name: 'SonarScanner', type: 'hudson.plugins.sonar.SonarRunnerInstallation' {
+                            sh """
+                                sonar-scanner \
+                                    -Dsonar.projectKey=${projectKey} \
+                                    -Dsonar.projectName="${projectName}" \
+                                    -Dsonar.projectVersion=${dateKey} \
+                                    -Dsonar.sources=. \
+                                    -Dsonar.exclusions=**/migrations/**,**/__pycache__/**,**/*.pyc,venv/**,**/.git/**,coverage.xml,junit-results.xml,pylint-report.json \
+                                    -Dsonar.tests=. \
+                                    -Dsonar.test.inclusions=**/test*.py,**/tests/** \
+                                    -Dsonar.python.coverage.reportPaths=coverage.xml \
+                                    -Dsonar.python.xunit.reportPath=junit-results.xml \
+                                    -Dsonar.python.pylint.reportPaths=pylint-report.json \
+                                    -Dsonar.python.version=3 \
+                                    -Dsonar.sourceEncoding=UTF-8 \
+                                    -Dsonar.host.url=${SONAR_HOST_URL} \
+                                    -Dsonar.login=${SONAR_AUTH_TOKEN} \
+                                    -Dsonar.qualitygate.wait=true \
+                                    -Dsonar.qualitygate.timeout=300
+                            """
                         }
                     }
                 }

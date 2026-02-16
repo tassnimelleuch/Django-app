@@ -17,12 +17,8 @@ pipeline {
         SECRET_KEY = sh(script: 'python3 -c "import secrets; print(secrets.token_urlsafe(50))"', returnStdout: true).trim()
         
         DOCKER_IMAGE_NAME = 'tasnimelleuchenis/django-contact-app'
-        // Create date-based tag: Feb-13-2026-16-30-20 (#59)
-        DOCKER_IMAGE_TAG = sh(script: '''date "+%b-%d-%Y-%H-%M-%S (#${BUILD_NUMBER})" | tr '[:upper:]' '[:lower:]' | sed 's/ /-/g' ''', returnStdout: true).trim()
-        
-        // Alternative formats (commented out):
-        // DOCKER_IMAGE_TAG = sh(script: '''date "+%Y-%m-%d-%H-%M-%S (#${BUILD_NUMBER})"''', returnStdout: true).trim()  // 2026-02-13-16-30-20 (#59)
-        // DOCKER_IMAGE_TAG = sh(script: '''date "+%Y%m%d-%H%M%S (#${BUILD_NUMBER})"''', returnStdout: true).trim()      // 20260213-163020 (#59)
+        // FIXED: Force English locale and use only valid Docker tag characters
+        DOCKER_IMAGE_TAG = sh(script: '''export LANG=C; date "+%b-%d-%Y-%H-%M-%S" | tr '[:upper:]' '[:lower:]' && echo -n "-#${BUILD_NUMBER}"''', returnStdout: true).trim().replace('\n', '')
         
         DOCKER_PULL_RETRIES = '3'
         DOCKER_PULL_DELAY = '5'
@@ -153,35 +149,31 @@ print('✅ Django initialized successfully')
         stage('SonarQube Analysis') {
             steps {
                 script {
-                    // Create clean date-based project key WITHOUT parentheses
+                    // FIXED: Create valid SonarQube project key (no spaces/parentheses)
                     def dateTag = sh(script: '''date "+%Y%m%d-%H%M%S"''', returnStdout: true).trim()
-                    
-                    // SonarQube project key - NO spaces or parentheses allowed
                     def projectKey = "django-app-${dateTag}-build-${env.BUILD_NUMBER}"
-                    
-                    // Keep the parentheses ONLY in the display name, NOT in the key
-                    def projectName = "Django Contact App Build ${dateTag} (#${env.BUILD_NUMBER})"
+                    def projectName = "Django Contact App ${dateTag} (#${env.BUILD_NUMBER})"
                     
                     echo "📊 Running SonarQube analysis for project: ${projectKey}"
                     
                     withSonarQubeEnv('sonarqube') {
                         sh """
                             cat > sonar-project.properties << EOF
-        sonar.projectKey=${projectKey}
-        sonar.projectName=${projectName}
-        sonar.projectVersion=${dateTag}
-        sonar.sources=.
-        sonar.exclusions=**/migrations/**,**/__pycache__/**,**/*.pyc,venv/**,**/.git/**,coverage.xml,junit-results.xml,pylint-report.json
-        sonar.tests=.
-        sonar.test.inclusions=**/test*.py,**/tests/**
-        sonar.python.coverage.reportPaths=coverage.xml
-        sonar.python.xunit.reportPath=junit-results.xml
-        sonar.python.pylint.reportPaths=pylint-report.json
-        sonar.python.version=3
-        sonar.sourceEncoding=UTF-8
-        sonar.qualitygate.wait=true
-        sonar.qualitygate.timeout=300
-        EOF
+sonar.projectKey=${projectKey}
+sonar.projectName=${projectName}
+sonar.projectVersion=${dateTag}
+sonar.sources=.
+sonar.exclusions=**/migrations/**,**/__pycache__/**,**/*.pyc,venv/**,**/.git/**,coverage.xml,junit-results.xml,pylint-report.json
+sonar.tests=.
+sonar.test.inclusions=**/test*.py,**/tests/**
+sonar.python.coverage.reportPaths=coverage.xml
+sonar.python.xunit.reportPath=junit-results.xml
+sonar.python.pylint.reportPaths=pylint-report.json
+sonar.python.version=3
+sonar.sourceEncoding=UTF-8
+sonar.qualitygate.wait=true
+sonar.qualitygate.timeout=300
+EOF
 
                             ./sonar-scanner/bin/sonar-scanner \
                                 -Dsonar.host.url=${SONAR_HOST_URL} \
@@ -247,7 +239,7 @@ print('✅ Django initialized successfully')
                         done
                     '''
                     
-                    // Build Docker image with date-based tag and build number in parentheses
+                    // FIXED: Docker build with valid tag
                     sh """
                         docker build \
                             --build-arg BUILD_NUMBER=${env.BUILD_NUMBER} \
@@ -295,10 +287,8 @@ print('✅ Django initialized successfully')
     
     post {
         always {
-            // Archive reports
             archiveArtifacts artifacts: 'coverage.xml, junit-results.xml, pylint-report.json, sonar-project.properties, .scannerwork/report-task.txt', allowEmptyArchive: true
             
-            // Display SonarQube URL
             script {
                 if (fileExists('.scannerwork/report-task.txt')) {
                     def reportTask = readFile('.scannerwork/report-task.txt')

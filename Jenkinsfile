@@ -136,6 +136,7 @@ print('✅ Django initialized successfully')
                 }
             }
         }
+        
         stage('SonarQube Analysis') {
             steps {
                 script {
@@ -149,35 +150,36 @@ print('✅ Django initialized successfully')
                     
                     echo "📊 Running SonarQube analysis for: ${projectName}"
                     
-                    // FIX: Add tool name here
                     withSonarQubeEnv('sonarqube') {
-                        // Use the tool from Jenkins configuration
-                        tool name: 'SonarScanner', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
+                        // FIXED: Get scanner home and add to PATH
+                        def scannerHome = tool name: 'SonarScanner', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
                         
-                        sh """
-                            sonar-scanner \
-                                -Dsonar.projectKey=${projectKey} \
-                                -Dsonar.projectName="${projectName}" \
-                                -Dsonar.projectVersion=${dateKey} \
-                                -Dsonar.sources=. \
-                                -Dsonar.exclusions=**/migrations/**,**/__pycache__/**,**/*.pyc,venv/**,**/.git/**,coverage.xml,junit-results.xml,pylint-report.json \
-                                -Dsonar.tests=. \
-                                -Dsonar.test.inclusions=**/test*.py,**/tests/** \
-                                -Dsonar.python.coverage.reportPaths=coverage.xml \
-                                -Dsonar.python.xunit.reportPath=junit-results.xml \
-                                -Dsonar.python.pylint.reportPaths=pylint-report.json \
-                                -Dsonar.python.version=3 \
-                                -Dsonar.sourceEncoding=UTF-8 \
-                                -Dsonar.host.url=${SONAR_HOST_URL} \
-                                -Dsonar.login=${SONAR_AUTH_TOKEN} \
-                                -Dsonar.qualitygate.wait=true \
-                                -Dsonar.qualitygate.timeout=300
-                        """
+                        withEnv(["PATH+SCANNER=${scannerHome}/bin"]) {
+                            sh """
+                                sonar-scanner \
+                                    -Dsonar.projectKey=${projectKey} \
+                                    -Dsonar.projectName="${projectName}" \
+                                    -Dsonar.projectVersion=${dateKey} \
+                                    -Dsonar.sources=. \
+                                    -Dsonar.exclusions=**/migrations/**,**/__pycache__/**,**/*.pyc,venv/**,**/.git/**,coverage.xml,junit-results.xml,pylint-report.json \
+                                    -Dsonar.tests=. \
+                                    -Dsonar.test.inclusions=**/test*.py,**/tests/** \
+                                    -Dsonar.python.coverage.reportPaths=coverage.xml \
+                                    -Dsonar.python.xunit.reportPath=junit-results.xml \
+                                    -Dsonar.python.pylint.reportPaths=pylint-report.json \
+                                    -Dsonar.python.version=3 \
+                                    -Dsonar.sourceEncoding=UTF-8 \
+                                    -Dsonar.host.url=${SONAR_HOST_URL} \
+                                    -Dsonar.login=${SONAR_AUTH_TOKEN} \
+                                    -Dsonar.qualitygate.wait=true \
+                                    -Dsonar.qualitygate.timeout=300
+                            """
+                        }
                     }
                 }
             }
         }
- 
+        
         stage('Quality Gate Check') {
             steps {
                 script {

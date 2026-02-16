@@ -17,7 +17,12 @@ pipeline {
         SECRET_KEY = sh(script: 'python3 -c "import secrets; print(secrets.token_urlsafe(50))"', returnStdout: true).trim()
         
         DOCKER_IMAGE_NAME = 'tasnimelleuchenis/django-contact-app'
-        DOCKER_IMAGE_TAG = "${env.BUILD_NUMBER}"
+        // Create date-based tag: Feb-13-2026-16-30-20 (#59)
+        DOCKER_IMAGE_TAG = sh(script: '''date "+%b-%d-%Y-%H-%M-%S (#${BUILD_NUMBER})" | tr '[:upper:]' '[:lower:]' | sed 's/ /-/g' ''', returnStdout: true).trim()
+        
+        // Alternative formats (commented out):
+        // DOCKER_IMAGE_TAG = sh(script: '''date "+%Y-%m-%d-%H-%M-%S (#${BUILD_NUMBER})"''', returnStdout: true).trim()  // 2026-02-13-16-30-20 (#59)
+        // DOCKER_IMAGE_TAG = sh(script: '''date "+%Y%m%d-%H%M%S (#${BUILD_NUMBER})"''', returnStdout: true).trim()      // 20260213-163020 (#59)
         
         DOCKER_PULL_RETRIES = '3'
         DOCKER_PULL_DELAY = '5'
@@ -29,6 +34,9 @@ pipeline {
                 cleanWs()
                 checkout scm
                 echo "✅ Workspace cleaned and code checked out"
+                script {
+                    echo "Build tag: ${env.DOCKER_IMAGE_TAG}"
+                }
             }
         }
         
@@ -145,16 +153,18 @@ print('✅ Django initialized successfully')
         stage('SonarQube Analysis') {
             steps {
                 script {
-                    echo "📊 Running SonarQube analysis..."
+                    // Use date-based project key
+                    def dateTag = sh(script: '''date "+%Y%m%d-%H%M%S"''', returnStdout: true).trim()
+                    def projectKey = "django-app-${dateTag} (#${env.BUILD_NUMBER})"
                     
-                    def projectKey = "django-app-${env.BUILD_NUMBER}"
+                    echo "📊 Running SonarQube analysis for project: ${projectKey}"
                     
                     withSonarQubeEnv('sonarqube') {
                         sh """
                             cat > sonar-project.properties << EOF
 sonar.projectKey=${projectKey}
-sonar.projectName=Django Contact App Build ${env.BUILD_NUMBER}
-sonar.projectVersion=${env.BUILD_NUMBER}
+sonar.projectName=Django Contact App Build ${dateTag} (#${env.BUILD_NUMBER})
+sonar.projectVersion=${dateTag} (#${env.BUILD_NUMBER})
 sonar.sources=.
 sonar.exclusions=**/migrations/**,**/__pycache__/**,**/*.pyc,venv/**,**/.git/**,coverage.xml,junit-results.xml,pylint-report.json
 sonar.tests=.
@@ -232,12 +242,13 @@ EOF
                         done
                     '''
                     
-                    // Build Docker image
+                    // Build Docker image with date-based tag and build number in parentheses
                     sh """
                         docker build \
                             --build-arg BUILD_NUMBER=${env.BUILD_NUMBER} \
                             --build-arg BUILD_DATE=\$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
                             --build-arg VCS_REF=\$(git rev-parse --short HEAD) \
+                            --build-arg BUILD_TAG="${env.DOCKER_IMAGE_TAG}" \
                             -t ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG} \
                             -t ${DOCKER_IMAGE_NAME}:latest \
                             .
@@ -252,8 +263,8 @@ EOF
                         echo "Logging into Docker Hub..."
                         echo "$DOCKER_HUB_CREDS_PSW" | docker login -u "$DOCKER_HUB_CREDS_USR" --password-stdin
                         
-                        echo "Pushing ${DOCKER_IMAGE_NAME}:${BUILD_NUMBER}..."
-                        docker push ${DOCKER_IMAGE_NAME}:${BUILD_NUMBER}
+                        echo "Pushing ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}..."
+                        docker push ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}
                         
                         echo "Pushing ${DOCKER_IMAGE_NAME}:latest..."
                         docker push ${DOCKER_IMAGE_NAME}:latest
@@ -261,7 +272,7 @@ EOF
                         docker logout
                         
                         echo "✅ Docker images successfully pushed to Docker Hub:"
-                        echo "   - ${DOCKER_IMAGE_NAME}:${BUILD_NUMBER}"
+                        echo "   - ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
                         echo "   - ${DOCKER_IMAGE_NAME}:latest"
                     '''
                 }

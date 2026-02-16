@@ -163,7 +163,7 @@ print('✅ Django initialized successfully')
                         def scannerHome = tool name: 'SonarScanner', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
                         
                         withEnv(["PATH+SCANNER=${scannerHome}/bin"]) {
-                            withCredentials([string(credentialsId: 'sonarcloud-token', variable: 'SONAR_TOKEN')]) {
+                            withCredentials([string(credentialsId: 'sonar-cloud', variable: 'SONAR_TOKEN')]) {
                                 sh """
                                     sonar-scanner \
                                         -Dsonar.projectKey=${projectKey} \

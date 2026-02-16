@@ -3,7 +3,7 @@ pipeline {
     
     options {
         buildDiscarder(logRotator(numToKeepStr: '10'))
-        timeout(time: 10, unit: 'MINUTES')
+        timeout(time: 30, unit: 'MINUTES')  // Increased timeout for Docker pushes
     }
     
     environment {
@@ -30,8 +30,11 @@ pipeline {
             date "+%Y-%m-%d at %H:%M:%S"
         ''', returnStdout: true).trim()
         
-        DOCKER_PULL_RETRIES = '3'
-        DOCKER_PULL_DELAY = '5'
+        DOCKER_PULL_RETRIES = '5'        // Increased retries
+        DOCKER_PULL_DELAY = '10'         // Increased delay
+        DOCKER_PUSH_RETRIES = '5'         // Max push retries
+        DOCKER_PUSH_DELAY = '15'          // Delay between push retries
+        DOCKER_PUSH_TIMEOUT = '300'       // 5 minutes per push attempt
     }
     
     stages {
@@ -151,7 +154,7 @@ print('✅ Django initialized successfully')
                     echo "📊 Running SonarQube analysis for: ${projectName}"
                     
                     withSonarQubeEnv('sonarqube') {
-                        // FIXED: Get scanner home and add to PATH
+                        // Get scanner home and add to PATH
                         def scannerHome = tool name: 'SonarScanner', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
                         
                         withEnv(["PATH+SCANNER=${scannerHome}/bin"]) {
@@ -214,6 +217,7 @@ print('✅ Django initialized successfully')
                 script {
                     echo "🐳 Building Docker image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
                     echo "📅 Build: ${HUMAN_READABLE_DATE} (#${BUILD_NUMBER})"
+                    echo "⏱️ This may take several minutes depending on network speed..."
                     
                     sh '''
                         echo "Pulling base image with retries..."
@@ -221,7 +225,7 @@ print('✅ Django initialized successfully')
                         
                         for i in $(seq 1 ${DOCKER_PULL_RETRIES}); do
                             echo "Attempt $i of ${DOCKER_PULL_RETRIES} to pull ${BASE_IMAGE}..."
-                            if docker pull ${BASE_IMAGE}; then
+                            if timeout 300 docker pull ${BASE_IMAGE}; then
                                 echo "✅ Base image pulled successfully"
                                 break
                             else
@@ -235,7 +239,6 @@ print('✅ Django initialized successfully')
                         done
                     '''
                     
-                    // Docker build with clean tag
                     sh """
                         docker build \
                             --build-arg BUILD_NUMBER=${env.BUILD_NUMBER} \
@@ -249,22 +252,53 @@ print('✅ Django initialized successfully')
                     """
                     
                     echo "✅ Docker image built: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
-                    
-                    echo "📤 Pushing Docker images to Docker Hub..."
+                    echo "📤 Pushing Docker images to Docker Hub (this may take 5-10 minutes)..."
                     
                     sh '''
                         echo "Logging into Docker Hub..."
                         echo "$DOCKER_HUB_CREDS_PSW" | docker login -u "$DOCKER_HUB_CREDS_USR" --password-stdin
                         
-                        echo "Pushing ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}..."
-                        docker push ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}
+                        # Function to push with retry and timeout
+                        push_with_retry() {
+                            local IMAGE=$1
+                            local TAG=$2
+                            local MAX_RETRIES=${DOCKER_PUSH_RETRIES}
+                            local DELAY=${DOCKER_PUSH_DELAY}
+                            local TIMEOUT=${DOCKER_PUSH_TIMEOUT}
+                            
+                            for i in $(seq 1 ${MAX_RETRIES}); do
+                                echo "Push attempt $i of ${MAX_RETRIES} for ${IMAGE}:${TAG}..."
+                                
+                                # Use timeout command to prevent infinite hangs
+                                if timeout ${TIMEOUT} docker push ${IMAGE}:${TAG}; then
+                                    echo "✅ Successfully pushed ${IMAGE}:${TAG}"
+                                    return 0
+                                else
+                                    EXIT_CODE=$?
+                                    if [ $i -eq ${MAX_RETRIES} ]; then
+                                        echo "❌ Failed to push after ${MAX_RETRIES} attempts"
+                                        return 1
+                                    fi
+                                    
+                                    if [ ${EXIT_CODE} -eq 124 ]; then
+                                        echo "⚠️ Push timed out after ${TIMEOUT} seconds"
+                                    else
+                                        echo "⚠️ Push failed with error code ${EXIT_CODE}"
+                                    fi
+                                    
+                                    echo "Waiting ${DELAY} seconds before retry..."
+                                    sleep ${DELAY}
+                                fi
+                            done
+                        }
                         
-                        echo "Pushing ${DOCKER_IMAGE_NAME}:latest..."
-                        docker push ${DOCKER_IMAGE_NAME}:latest
+                        # Push both tags with retry logic
+                        push_with_retry "${DOCKER_IMAGE_NAME}" "${DOCKER_IMAGE_TAG}" || exit 1
+                        push_with_retry "${DOCKER_IMAGE_NAME}" "latest" || exit 1
                         
                         docker logout
                         
-                        echo "✅ Docker images successfully pushed to Docker Hub:"
+                        echo "✅✅✅ DOCKER PUSH COMPLETED SUCCESSFULLY! ✅✅✅"
                         echo "   - ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
                         echo "   - ${DOCKER_IMAGE_NAME}:latest"
                     '''
@@ -272,7 +306,9 @@ print('✅ Django initialized successfully')
             }
             post {
                 failure {
-                    echo "❌ Docker build or push failed"
+                    echo "❌❌❌ DOCKER BUILD OR PUSH FAILED AFTER MULTIPLE RETRIES ❌❌❌"
+                    echo "This could be due to network issues or Docker Hub being slow."
+                    echo "The build will continue but without Docker push."
                     sh 'docker logout || true'
                 }
                 success {

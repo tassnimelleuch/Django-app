@@ -5,6 +5,7 @@ pipeline {
         buildDiscarder(logRotator(numToKeepStr: '10'))
         timeout(time: 30, unit: 'MINUTES')
     }
+    
     environment {
         PYTHON = sh(script: 'which python3 || which python', returnStdout: true).trim()
         VENV_DIR = 'venv'
@@ -39,7 +40,7 @@ pipeline {
         
         GITHUB_REPO = 'django-contact-app'
         GITHUB_OWNER = 'tassnimelleuch'
-}
+    }
     
     stages {
         stage('Clean Workspace') {
@@ -144,7 +145,7 @@ print('✅ Django initialized successfully')
             }
         }
         
-        // ===== UPDATED: SonarCloud with GitHub PR decoration =====
+        // ===== FIXED: SonarCloud with proper branch handling =====
         stage('SonarCloud Analysis') {
             steps {
                 script {
@@ -154,7 +155,7 @@ print('✅ Django initialized successfully')
                     // Determine if this is a PR or branch build
                     def isPullRequest = env.CHANGE_ID != null
                     def prId = isPullRequest ? env.CHANGE_ID : ''
-                    def branchName = isPullRequest ? env.CHANGE_BRANCH : env.BRANCH_NAME
+                    def branchName = isPullRequest ? env.CHANGE_BRANCH : (env.BRANCH_NAME ?: 'main')
                     def baseBranch = isPullRequest ? env.CHANGE_TARGET : ''
                     
                     withSonarQubeEnv('sonarcloud') {
@@ -162,7 +163,7 @@ print('✅ Django initialized successfully')
                         
                         withEnv(["PATH+SCANNER=${scannerHome}/bin"]) {
                             withCredentials([string(credentialsId: 'sonar-cloud', variable: 'SONAR_TOKEN')]) {
-                                sh """
+                                def sonarCommand = """
                                     sonar-scanner \
                                         -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
                                         -Dsonar.organization=${SONAR_ORGANIZATION} \
@@ -178,17 +179,22 @@ print('✅ Django initialized successfully')
                                         -Dsonar.python.version=3 \
                                         -Dsonar.sourceEncoding=UTF-8 \
                                         -Dsonar.host.url=https://sonarcloud.io \
-                                        -Dsonar.token=\${SONAR_TOKEN} \
-                                        ${isPullRequest ? """
+                                        -Dsonar.token=\${SONAR_TOKEN}
+                                """
+                                
+                                if (isPullRequest) {
+                                    sonarCommand += """
                                         -Dsonar.pullrequest.key=${prId} \
                                         -Dsonar.pullrequest.branch=${branchName} \
                                         -Dsonar.pullrequest.base=${baseBranch} \
                                         -Dsonar.pullrequest.provider=GitHub \
                                         -Dsonar.pullrequest.github.repository=${GITHUB_OWNER}/${GITHUB_REPO}
-                                        """ : """
-                                        -Dsonar.branch.name=${branchName}
-                                        """}
-                                """
+                                    """
+                                } else {
+                                    sonarCommand += " -Dsonar.branch.name=${branchName}"
+                                }
+                                
+                                sh sonarCommand
                             }
                         }
                     }
@@ -204,7 +210,7 @@ print('✅ Django initialized successfully')
                     
                     timeout(time: 3, unit: 'MINUTES') {
                         try {
-                            def qg = waitForQualityGate(abortPipeline: true)  // Changed to true to fail pipeline if quality gate fails
+                            def qg = waitForQualityGate(abortPipeline: true)
                             
                             if (qg.status == 'OK') {
                                 echo "✅✅✅ QUALITY GATE PASSED! ✅✅✅"
@@ -212,8 +218,6 @@ print('✅ Django initialized successfully')
                             } else if (qg.status == 'WARN') {
                                 echo "⚠️⚠️⚠️ QUALITY GATE WARNING ⚠️⚠️⚠️"
                                 echo "⚠️ GitHub will show yellow warning"
-                                // Optionally fail the pipeline for warnings too
-                                // error("Quality Gate warning")
                             } else if (qg.status == 'ERROR') {
                                 echo "❌❌❌ QUALITY GATE FAILED ❌❌❌"
                                 echo "❌ GitHub will show red X"

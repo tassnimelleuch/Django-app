@@ -154,13 +154,13 @@ print('✅ Django initialized successfully')
                         echo "🔗 SonarCloud Dashboard: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
                         
                         // DEBUG: Save the FULL response
-                        sh(script: '''
+                        sh(script: """
                             curl -s -H "Authorization: token $GITHUB_TOKEN" \
-                            "https://api.github.com/repos/'''${GITHUB_OWNER}'''/'''${GITHUB_REPO}'''/commits/'''${GIT_COMMIT}'''/check-runs" > full-response.json
+                            "https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/commits/${GIT_COMMIT}/check-runs" > full-response.json
                             echo "===== FULL GITHUB RESPONSE ====="
                             cat full-response.json
                             echo "===== END RESPONSE ====="
-                        ''', mask: true)
+                        """, mask: true)    
                         
                         // Show all check runs
                         def allChecks = sh(

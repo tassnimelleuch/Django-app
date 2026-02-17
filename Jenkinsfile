@@ -141,13 +141,11 @@ print('✅ Django initialized successfully')
         stage('SonarCloud Analysis') {
             steps {
                 script {
-                    def dateKey = sh(script: '''#!/bin/bash
-                        export LANG=C
-                        date "+%Y-%m-%d-%H-%M-%S"
-                    ''', returnStdout: true).trim()
+                    // Use a FIXED project key - this should NEVER change
+                    def projectKey = "django-contact-app"  // STATIC - same for all builds
                     
-                    def projectKey = "django-contact-app-${dateKey}-build-${env.BUILD_NUMBER}"
-                    def projectName = "Django Contact App ${dateKey} (#${env.BUILD_NUMBER})"
+                    // Project name can be descriptive but should also be static
+                    def projectName = "Django Contact App"
                     
                     echo "📊 Running SonarCloud analysis for: ${projectName}"
                     echo "🔗 View results at: https://sonarcloud.io/dashboard?id=${projectKey}"
@@ -162,7 +160,7 @@ print('✅ Django initialized successfully')
                                         -Dsonar.projectKey=${projectKey} \
                                         -Dsonar.organization=tassnimelleuch \
                                         -Dsonar.projectName="${projectName}" \
-                                        -Dsonar.projectVersion=${dateKey} \
+                                        -Dsonar.projectVersion=${env.BUILD_NUMBER} \
                                         -Dsonar.sources=. \
                                         -Dsonar.exclusions=**/migrations/**,**/__pycache__/**,**/*.pyc,venv/**,**/.git/**,coverage.xml,junit-results.xml,pylint-report.json \
                                         -Dsonar.tests=. \

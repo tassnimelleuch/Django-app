@@ -33,6 +33,14 @@ pipeline {
         DOCKER_PUSH_RETRIES = '5'
         DOCKER_PUSH_DELAY = '15'
         DOCKER_PUSH_TIMEOUT = '300'
+        
+        // ===== SonarCloud Configuration =====
+        SONAR_PROJECT_KEY = 'django-contact-app'  // This NEVER changes
+        SONAR_ORGANIZATION = 'tassnimelleuch'      // Your GitHub/SonarCloud org
+        
+        // ===== GitHub Configuration for PR decoration =====
+        GITHUB_REPO = 'django-contact-app'  // Your GitHub repo name
+        GITHUB_OWNER = 'tassnimelleuch'      // Your GitHub username
     }
     
     stages {
@@ -138,29 +146,30 @@ print('✅ Django initialized successfully')
             }
         }
         
+        // ===== UPDATED: SonarCloud with GitHub PR decoration =====
         stage('SonarCloud Analysis') {
             steps {
                 script {
-                    // Use a FIXED project key - this should NEVER change
-                    def projectKey = "django-contact-app"  // STATIC - same for all builds
+                    echo "📊 Running SonarCloud analysis for project: ${SONAR_PROJECT_KEY}"
+                    echo "🔗 View results at: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
                     
-                    // Project name can be descriptive but should also be static
-                    def projectName = "Django Contact App"
-                    
-                    echo "📊 Running SonarCloud analysis for: ${projectName}"
-                    echo "🔗 View results at: https://sonarcloud.io/dashboard?id=${projectKey}"
+                    // Determine if this is a PR or branch build
+                    def isPullRequest = env.CHANGE_ID != null
+                    def prId = isPullRequest ? env.CHANGE_ID : ''
+                    def branchName = isPullRequest ? env.CHANGE_BRANCH : env.BRANCH_NAME
+                    def baseBranch = isPullRequest ? env.CHANGE_TARGET : ''
                     
                     withSonarQubeEnv('sonarcloud') {
                         def scannerHome = tool name: 'SonarScanner', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
                         
                         withEnv(["PATH+SCANNER=${scannerHome}/bin"]) {
-                            withCredentials([string(credentialsId: 'sonar-cloud', variable: 'SONAR_TOKEN')]) {
+                            withCredentials([string(credentialsId: 'sonarcloud', variable: 'SONAR_TOKEN')]) {
                                 sh """
                                     sonar-scanner \
-                                        -Dsonar.projectKey=${projectKey} \
-                                        -Dsonar.organization=tassnimelleuch \
-                                        -Dsonar.projectName="${projectName}" \
-                                        -Dsonar.projectVersion=${env.BUILD_NUMBER} \
+                                        -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                                        -Dsonar.organization=${SONAR_ORGANIZATION} \
+                                        -Dsonar.projectName="Django Contact App" \
+                                        -Dsonar.projectVersion=${BUILD_NUMBER} \
                                         -Dsonar.sources=. \
                                         -Dsonar.exclusions=**/migrations/**,**/__pycache__/**,**/*.pyc,venv/**,**/.git/**,coverage.xml,junit-results.xml,pylint-report.json \
                                         -Dsonar.tests=. \
@@ -171,13 +180,20 @@ print('✅ Django initialized successfully')
                                         -Dsonar.python.version=3 \
                                         -Dsonar.sourceEncoding=UTF-8 \
                                         -Dsonar.host.url=https://sonarcloud.io \
-                                        -Dsonar.token=\${SONAR_TOKEN}
+                                        -Dsonar.token=\${SONAR_TOKEN} \
+                                        ${isPullRequest ? """
+                                        -Dsonar.pullrequest.key=${prId} \
+                                        -Dsonar.pullrequest.branch=${branchName} \
+                                        -Dsonar.pullrequest.base=${baseBranch} \
+                                        -Dsonar.pullrequest.provider=GitHub \
+                                        -Dsonar.pullrequest.github.repository=${GITHUB_OWNER}/${GITHUB_REPO}
+                                        """ : """
+                                        -Dsonar.branch.name=${branchName}
+                                        """}
                                 """
                             }
                         }
                     }
-                    
-                    env.SONAR_PROJECT_KEY = projectKey
                 }
             }
         }
@@ -186,32 +202,32 @@ print('✅ Django initialized successfully')
             steps {
                 script {
                     echo "🔍 Checking SonarCloud Quality Gate..."
-                    echo "⏳ Waiting for SonarCloud to process analysis (this may take 10-30 seconds)..."
-                    
-                    sleep(time: 15, unit: 'SECONDS')
+                    echo "⏳ This will update GitHub with the status (✅/❌)..."
                     
                     timeout(time: 3, unit: 'MINUTES') {
                         try {
-                            def qg = waitForQualityGate(abortPipeline: false)
+                            def qg = waitForQualityGate(abortPipeline: true)  // Changed to true to fail pipeline if quality gate fails
                             
                             if (qg.status == 'OK') {
                                 echo "✅✅✅ QUALITY GATE PASSED! ✅✅✅"
+                                echo "✅ GitHub will show green checkmark"
                             } else if (qg.status == 'WARN') {
                                 echo "⚠️⚠️⚠️ QUALITY GATE WARNING ⚠️⚠️⚠️"
-                                echo "Status: ${qg.status}"
+                                echo "⚠️ GitHub will show yellow warning"
+                                // Optionally fail the pipeline for warnings too
+                                // error("Quality Gate warning")
                             } else if (qg.status == 'ERROR') {
                                 echo "❌❌❌ QUALITY GATE FAILED ❌❌❌"
-                                echo "Status: ${qg.status}"
-                            } else {
-                                echo "ℹ️ Quality Gate status: ${qg.status}"
+                                echo "❌ GitHub will show red X"
+                                error("Quality Gate failed")
                             }
                             
-                            echo "🔗 View detailed results: https://sonarcloud.io/dashboard?id=${env.SONAR_PROJECT_KEY}"
+                            echo "🔗 View detailed results: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
                             
                         } catch (Exception e) {
-                            echo "⚠️ Could not retrieve Quality Gate status: ${e.message}"
-                            echo "ℹ️ This is often because SonarCloud is still processing or the task ID wasn't found."
-                            echo "🔗 Check manually at: https://sonarcloud.io/dashboard?id=${env.SONAR_PROJECT_KEY}"
+                            echo "❌ Quality Gate check failed: ${e.message}"
+                            echo "🔗 Check manually at: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
+                            error("Pipeline failed due to Quality Gate: ${e.message}")
                         }
                     }
                 }
@@ -229,8 +245,6 @@ print('✅ Django initialized successfully')
             steps {
                 script {
                     echo "🐳 Building Docker image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
-                    echo "📅 Build: ${HUMAN_READABLE_DATE} (#${BUILD_NUMBER})"
-                    echo "⏱️ This may take several minutes depending on network speed..."
                     
                     sh '''
                         echo "Pulling base image with retries..."
@@ -265,13 +279,12 @@ print('✅ Django initialized successfully')
                     """
                     
                     echo "✅ Docker image built: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
-                    echo "📤 Pushing Docker images to Docker Hub (this may take 5-10 minutes)..."
+                    echo "📤 Pushing Docker images to Docker Hub..."
                     
                     sh '''
                         echo "Logging into Docker Hub..."
                         echo "$DOCKER_HUB_CREDS_PSW" | docker login -u "$DOCKER_HUB_CREDS_USR" --password-stdin
                         
-                        # Function to push with retry and timeout
                         push_with_retry() {
                             local IMAGE=$1
                             local TAG=$2
@@ -282,7 +295,6 @@ print('✅ Django initialized successfully')
                             for i in $(seq 1 ${MAX_RETRIES}); do
                                 echo "Push attempt $i of ${MAX_RETRIES} for ${IMAGE}:${TAG}..."
                                 
-                                # Use timeout command to prevent infinite hangs
                                 if timeout ${TIMEOUT} docker push ${IMAGE}:${TAG}; then
                                     echo "✅ Successfully pushed ${IMAGE}:${TAG}"
                                     return 0
@@ -293,35 +305,24 @@ print('✅ Django initialized successfully')
                                         return 1
                                     fi
                                     
-                                    if [ ${EXIT_CODE} -eq 124 ]; then
-                                        echo "⚠️ Push timed out after ${TIMEOUT} seconds"
-                                    else
-                                        echo "⚠️ Push failed with error code ${EXIT_CODE}"
-                                    fi
-                                    
                                     echo "Waiting ${DELAY} seconds before retry..."
                                     sleep ${DELAY}
                                 fi
                             done
                         }
                         
-                        # Push both tags with retry logic
                         push_with_retry "${DOCKER_IMAGE_NAME}" "${DOCKER_IMAGE_TAG}" || exit 1
                         push_with_retry "${DOCKER_IMAGE_NAME}" "latest" || exit 1
                         
                         docker logout
                         
                         echo "✅✅✅ DOCKER PUSH COMPLETED SUCCESSFULLY! ✅✅✅"
-                        echo "   - ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
-                        echo "   - ${DOCKER_IMAGE_NAME}:latest"
                     '''
                 }
             }
             post {
                 failure {
                     echo "❌❌❌ DOCKER BUILD OR PUSH FAILED AFTER MULTIPLE RETRIES ❌❌❌"
-                    echo "This could be due to network issues or Docker Hub being slow."
-                    echo "The build will continue but without Docker push."
                     sh 'docker logout || true'
                 }
                 success {
@@ -333,27 +334,7 @@ print('✅ Django initialized successfully')
     
     post {
         always {
-            archiveArtifacts artifacts: 'coverage.xml, junit-results.xml, pylint-report.json, sonar-project.properties, .scannerwork/report-task.txt', allowEmptyArchive: true
-            
-            script {
-                if (fileExists('.scannerwork/report-task.txt')) {
-                    def reportTask = readFile('.scannerwork/report-task.txt')
-                    
-                    def extractValue = { key ->
-                        def matcher = reportTask =~ /${key}=(.*)/
-                        return matcher.find() ? matcher.group(1) : null
-                    }
-                    
-                    def dashboardUrl = extractValue('dashboardUrl')
-                    if (dashboardUrl) {
-                        echo "☁️ SonarCloud Analysis URL: ${dashboardUrl}"
-                        echo "📊 Project: Django Contact App ${HUMAN_READABLE_DATE} (#${BUILD_NUMBER})"
-                    }
-                } else {
-                    echo "⚠️ SonarCloud report file not found. Analysis may still be processing."
-                    echo "🔗 Check manually at: https://sonarcloud.io/dashboard?id=django-contact-app"
-                }
-            }
+            archiveArtifacts artifacts: 'coverage.xml, junit-results.xml, pylint-report.json', allowEmptyArchive: true
             
             sh '''
                 rm -rf ${VENV_DIR} || true
@@ -367,22 +348,23 @@ print('✅ Django initialized successfully')
             echo "✅✅✅ PIPELINE SUCCESSFUL! ✅✅✅"
             echo "📅 Build: ${HUMAN_READABLE_DATE} (#${BUILD_NUMBER})"
             echo "🐳 Docker image: ${env.DOCKER_IMAGE_NAME}:${env.DOCKER_IMAGE_TAG}"
-            echo "☁️ SonarCloud: Django Contact App ${HUMAN_READABLE_DATE} (#${BUILD_NUMBER})"
             echo "📦 View on Docker Hub: https://hub.docker.com/r/${env.DOCKER_IMAGE_NAME}/tags"
-            echo "📊 View on SonarCloud: https://sonarcloud.io/dashboard?id=django-contact-app-${BUILD_NUMBER}"
+            echo "📊 View on SonarCloud: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
+            echo "✅ GitHub check will show PASSED"
         }
         
         failure {
             echo "❌❌❌ PIPELINE FAILED ❌❌❌"
             echo "📅 Build: ${HUMAN_READABLE_DATE} (#${BUILD_NUMBER})"
-            echo "📊 SonarCloud results (if any): https://sonarcloud.io/dashboard?id=django-contact-app-${BUILD_NUMBER}"
-            echo "Check the logs above for details"
+            echo "📊 SonarCloud results: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
+            echo "❌ GitHub check will show FAILED"
         }
         
         unstable {
             echo "⚠️⚠️⚠️ PIPELINE UNSTABLE ⚠️⚠️⚠️"
             echo "📅 Build: ${HUMAN_READABLE_DATE} (#${BUILD_NUMBER})"
-            echo "📊 SonarCloud results: https://sonarcloud.io/dashboard?id=django-contact-app-${BUILD_NUMBER}"
+            echo "📊 SonarCloud results: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
+            echo "⚠️ GitHub check will show WARNING"
         }
     }
 }

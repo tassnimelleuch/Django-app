@@ -145,23 +145,26 @@ print('✅ Django initialized successfully')
         // ===== COMPLETELY FIXED SYNTAX - THIS WILL WORK =====
         stage('Verify SonarCloud Quality Gate') {
             steps {
-                withCredentials([string(credentialsId: 'github-token', variable: 'GITHUB_TOKEN')]) {
+                withCredentials([usernamePassword(
+                    credentialsId: 'github-token', 
+                    usernameVariable: 'GITHUB_USER',     // Variable for username
+                    passwordVariable: 'GITHUB_TOKEN'      // Variable for token
+                )]) {
                     script {
                         echo "🔍 VERIFYING SonarCloud quality gate from GitHub..."
                         echo "🔗 SonarCloud Dashboard: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
+                        echo "Using GitHub user: $GITHUB_USER"
                         
                         def maxRetries = 20
                         def retryCount = 0
                         def sonarConclusion = "pending"
                         
                         while (retryCount < maxRetries && sonarConclusion == "pending") {
-                            // FIXED: Proper string concatenation
                             sh(script: """
                                 curl -s -H "Authorization: token $GITHUB_TOKEN" \
                                 "https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/commits/${GIT_COMMIT}/check-runs" > sonar-check.json
                             """)
                             
-                            // Check if SonarCloud exists
                             def sonarPresent = sh(
                                 script: "grep -i 'sonarcloud' sonar-check.json | wc -l",
                                 returnStdout: true
@@ -181,6 +184,12 @@ print('✅ Django initialized successfully')
                                 ).trim()
                                 
                                 echo "SonarCloud conclusion: ${sonarConclusion}"
+                                
+                                if (sonarConclusion == "success") {
+                                    echo "✅✅✅ SONARCLOUD PASSED! ✅✅✅"
+                                } else if (sonarConclusion == "failure") {
+                                    error "❌❌❌ SONARCLOUD FAILED! ❌❌❌"
+                                }
                             } else {
                                 echo "SonarCloud check not found yet... (attempt ${retryCount + 1}/${maxRetries})"
                             }
@@ -194,20 +203,8 @@ print('✅ Django initialized successfully')
                             }
                         }
                         
-                        // FINAL DECISION
-                        echo "🔍 FINAL SonarCloud verification result: ${sonarConclusion}"
-                        
-                        if (sonarConclusion == "success") {
-                            echo "✅✅✅ QUALITY GATE PASSED! Pipeline continuing... ✅✅✅"
-                        } 
-                        else if (sonarConclusion == "failure") {
-                            echo "❌❌❌ QUALITY GATE FAILED! Pipeline aborting... ❌❌❌"
-                            error("SonarCloud quality gate failed - check https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}")
-                        } 
-                        else {
-                            echo "⚠️⚠️⚠️ Could not verify SonarCloud status after ${maxRetries} attempts ⚠️⚠️⚠️"
-                            echo "Please check manually: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
-                            error("Cannot verify SonarCloud quality gate status - manual check required")
+                        if (sonarConclusion != "success") {
+                            error "Cannot verify SonarCloud quality gate - status: ${sonarConclusion}"
                         }
                         
                         archiveArtifacts artifacts: 'sonar-check.json', allowEmptyArchive: true

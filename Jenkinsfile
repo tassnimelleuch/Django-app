@@ -190,7 +190,6 @@ print('✅ Django initialized successfully')
                     echo "🔍 Checking SonarCloud Quality Gate..."
                     echo "⏳ Waiting for SonarCloud to process analysis (this may take 10-30 seconds)..."
                     
-                    // Give SonarCloud time to process
                     sleep(time: 15, unit: 'SECONDS')
                     
                     timeout(time: 3, unit: 'MINUTES') {

@@ -38,7 +38,6 @@ pipeline {
         SONAR_PROJECT_KEY = 'django-contact-app'  // This NEVER changes
         SONAR_ORGANIZATION = 'tassnimelleuch'      // Your GitHub/SonarCloud org
         
-        // ===== GitHub Configuration for PR decoration =====
         GITHUB_REPO = 'django-contact-app'  // Your GitHub repo name
         GITHUB_OWNER = 'tassnimelleuch'      // Your GitHub username
     }

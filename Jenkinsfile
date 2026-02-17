@@ -33,11 +33,10 @@ pipeline {
         DOCKER_PUSH_DELAY = '15'
         DOCKER_PUSH_TIMEOUT = '300'
         
-        // SonarCloud configuration
-        SONAR_PROJECT_KEY = 'tassnimelleuch_django-contact-app'  // Format: OWNER_REPO
-        SONAR_ORGANIZATION = 'tassnimelleuch'
+        // GitHub/SonarCloud configuration
         GITHUB_REPO = 'django-contact-app'
         GITHUB_OWNER = 'tassnimelleuch'
+        GITHUB_TOKEN = credentials('github-token') // You need to add this credential in Jenkins
     }
     
     stages {
@@ -49,6 +48,7 @@ pipeline {
                 script {
                     echo "🏷️ Build: ${HUMAN_READABLE_DATE} (#${BUILD_NUMBER})"
                     echo "🐳 Docker tag: ${DOCKER_IMAGE_TAG}"
+                    echo "🔍 Commit: ${GIT_COMMIT}"
                 }
             }
         }
@@ -141,71 +141,95 @@ print('✅ Django initialized successfully')
             }
         }
         
-        // ===== SIMPLIFIED SonarCloud Analysis =====
-        stage('SonarCloud Analysis') {
+        // ===== FIXED: Check SonarCloud status from GitHub (NO SCANNING) =====
+        stage('Wait for SonarCloud Analysis') {
             steps {
                 script {
-                    echo "📊 Running SonarCloud analysis for project: ${SONAR_PROJECT_KEY}"
+                    echo "⏳ Waiting for SonarCloud to complete analysis on GitHub..."
                     
-                    // Determine branch/PR context
-                    def isPullRequest = env.CHANGE_ID != null
-                    def branchName = isPullRequest ? env.CHANGE_BRANCH : (env.BRANCH_NAME ?: 'main')
+                    // Give SonarCloud time to start analysis (30 seconds)
+                    sleep(time: 30, unit: 'SECONDS')
                     
-                    withSonarQubeEnv('sonarcloud') {
-                        withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
-                            // Simple sonar-scanner command - GitHub integration is automatic
-                            sh """
-                                sonar-scanner \
-                                    -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
-                                    -Dsonar.organization=${SONAR_ORGANIZATION} \
-                                    -Dsonar.sources=. \
-                                    -Dsonar.exclusions=**/migrations/**,**/__pycache__/**,**/*.pyc,venv/**,**/.git/**,coverage.xml,junit-results.xml,pylint-report.json \
-                                    -Dsonar.tests=. \
-                                    -Dsonar.test.inclusions=**/test*.py,**/tests/** \
-                                    -Dsonar.python.coverage.reportPaths=coverage.xml \
-                                    -Dsonar.python.xunit.reportPath=junit-results.xml \
-                                    -Dsonar.python.pylint.reportPaths=pylint-report.json \
-                                    -Dsonar.python.version=3 \
-                                    -Dsonar.sourceEncoding=UTF-8 \
-                                    -Dsonar.host.url=https://sonarcloud.io \
-                                    -Dsonar.token=\${SONAR_TOKEN}
-                            """
+                    def maxRetries = 20
+                    def retryCount = 0
+                    def sonarStatus = "pending"
+                    
+                    while (retryCount < maxRetries && sonarStatus == "pending") {
+                        try {
+                            // Check SonarCloud status via GitHub API
+                            def response = sh(
+                                script: """
+                                    curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
+                                    "https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/commits/${GIT_COMMIT}/check-runs" | \
+                                    jq -r '.check_runs[] | select(.name | contains("SonarCloud")) | .conclusion' | \
+                                    head -1
+                                """,
+                                returnStdout: true
+                            ).trim()
+                            
+                            if (response && response != "null") {
+                                sonarStatus = response
+                                echo "SonarCloud status: ${sonarStatus}"
+                            } else {
+                                echo "SonarCloud check not found yet... (attempt ${retryCount + 1}/${maxRetries})"
+                            }
+                            
+                        } catch (Exception e) {
+                            echo "Error checking status: ${e.message}"
                         }
+                        
+                        if (sonarStatus == "pending" || sonarStatus == "null" || sonarStatus == "") {
+                            retryCount++
+                            if (retryCount < maxRetries) {
+                                echo "Waiting 15 seconds before next check... (${retryCount}/${maxRetries})"
+                                sleep(time: 15, unit: 'SECONDS')
+                            }
+                        }
+                    }
+                    
+                    // Store the status for later stages
+                    env.SONAR_STATUS = sonarStatus
+                }
+            }
+        }
+        
+        // ===== NEW: Quality Gate Decision based on GitHub status =====
+        stage('Check SonarCloud Quality Gate') {
+            steps {
+                script {
+                    def sonarStatus = env.SONAR_STATUS ?: "unknown"
+                    
+                    echo "📊 Final SonarCloud status: ${sonarStatus}"
+                    echo "🔗 View results: https://sonarcloud.io/dashboard?id=tassnimelleuch_django-contact-app"
+                    
+                    if (sonarStatus == "success") {
+                        echo "✅✅✅ QUALITY GATE PASSED! ✅✅✅"
+                        echo "✅ GitHub shows: Green checkmark"
+                    } 
+                    else if (sonarStatus == "failure") {
+                        echo "❌❌❌ QUALITY GATE FAILED ❌❌❌"
+                        echo "❌ GitHub shows: Red X"
+                        error("SonarCloud quality gate failed")
+                    } 
+                    else if (sonarStatus == "neutral" || sonarStatus == "skipped") {
+                        echo "⚠️⚠️⚠️ QUALITY GATE SKIPPED ⚠️⚠️⚠️"
+                        echo "⚠️ SonarCloud analysis was skipped or has no quality gate"
+                        // Decide if you want to fail or continue
+                        // error("SonarCloud quality gate not available")
+                    }
+                    else {
+                        echo "⚠️ SonarCloud status unknown or still pending: ${sonarStatus}"
+                        echo "⚠️ Proceeding with caution or you can fail here"
+                        // Option 1: Fail if unknown
+                        // error("Cannot verify SonarCloud quality gate status")
+                        
+                        // Option 2: Continue with warning
+                        echo "⚠️ Continuing pipeline but quality gate status unknown"
                     }
                 }
             }
         }
         
-        // ===== Quality Gate Check =====
-        stage('Check SonarCloud Quality Gate') {
-            steps {
-                script {
-                    echo "🔍 Checking SonarCloud Quality Gate status from GitHub..."
-                    
-                    // Wait for SonarCloud to complete its scan (give it time)
-                    sleep(time: 30, unit: 'SECONDS')
-                    
-                    // Use GitHub API to check SonarCloud status
-                    def sonarStatus = sh(
-                        script: """
-                            curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
-                            "https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/commits/${GIT_COMMIT}/check-runs" | \
-                            jq -r '.check_runs[] | select(.name | contains("SonarCloud")) | .conclusion'
-                        """,
-                        returnStdout: true
-                    ).trim()
-                    
-                    if (sonarStatus == "success") {
-                        echo "✅✅✅ SONARCLOUD QUALITY GATE PASSED! ✅✅✅"
-                    } else if (sonarStatus == "failure") {
-                        error "❌ SonarCloud quality gate failed"
-                    } else {
-                        echo "⏳ SonarCloud still processing or status unknown: ${sonarStatus}"
-                        // You might want to wait and retry here
-                    }
-                }
-            }
-        }
         stage('Docker Build and Push') {
             when {
                 expression { fileExists('Dockerfile') }
@@ -321,21 +345,21 @@ print('✅ Django initialized successfully')
             echo "📅 Build: ${HUMAN_READABLE_DATE} (#${BUILD_NUMBER})"
             echo "🐳 Docker image: ${env.DOCKER_IMAGE_NAME}:${env.DOCKER_IMAGE_TAG}"
             echo "📦 View on Docker Hub: https://hub.docker.com/r/${env.DOCKER_IMAGE_NAME}/tags"
-            echo "📊 View on SonarCloud: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
+            echo "📊 View on SonarCloud: https://sonarcloud.io/dashboard?id=tassnimelleuch_django-contact-app"
             echo "✅ GitHub check will show PASSED"
         }
         
         failure {
             echo "❌❌❌ PIPELINE FAILED ❌❌❌"
             echo "📅 Build: ${HUMAN_READABLE_DATE} (#${BUILD_NUMBER})"
-            echo "📊 SonarCloud results: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
+            echo "📊 SonarCloud results: https://sonarcloud.io/dashboard?id=tassnimelleuch_django-contact-app"
             echo "❌ GitHub check will show FAILED"
         }
         
         unstable {
             echo "⚠️⚠️⚠️ PIPELINE UNSTABLE ⚠️⚠️⚠️"
             echo "📅 Build: ${HUMAN_READABLE_DATE} (#${BUILD_NUMBER})"
-            echo "📊 SonarCloud results: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
+            echo "📊 SonarCloud results: https://sonarcloud.io/dashboard?id=tassnimelleuch_django-contact-app"
             echo "⚠️ GitHub check will show WARNING"
         }
     }

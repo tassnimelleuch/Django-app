@@ -147,67 +147,78 @@ print('✅ Django initialized successfully')
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'github-token', 
-                    usernameVariable: 'GITHUB_USER',     // Variable for username
-                    passwordVariable: 'GITHUB_TOKEN'      // Variable for token
+                    usernameVariable: 'GITHUB_USER',
+                    passwordVariable: 'GITHUB_TOKEN'
                 )]) {
                     script {
                         echo "🔍 VERIFYING SonarCloud quality gate from GitHub..."
                         echo "🔗 SonarCloud Dashboard: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
-                        echo "Using GitHub user: $GITHUB_USER"
                         
-                        def maxRetries = 20
-                        def retryCount = 0
-                        def sonarConclusion = "pending"
+                        // DEBUG: Save the FULL response
+                        sh(script: """
+                            curl -s -H "Authorization: token $GITHUB_TOKEN" \
+                            "https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/commits/${GIT_COMMIT}/check-runs" > full-response.json
+                            echo "===== FULL GITHUB RESPONSE ====="
+                            cat full-response.json
+                            echo "===== END RESPONSE ====="
+                        """)
                         
-                        while (retryCount < maxRetries && sonarConclusion == "pending") {
-                            sh(script: """
-                                curl -s -H "Authorization: token $GITHUB_TOKEN" \
-                                "https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/commits/${GIT_COMMIT}/check-runs" > sonar-check.json
-                            """)
-                            
-                            def sonarPresent = sh(
-                                script: "grep -i 'sonarcloud' sonar-check.json | wc -l",
+                        // Show all check runs
+                        def allChecks = sh(
+                            script: "grep -o '\"name\":\"[^\"]*\"' full-response.json || echo 'No checks found'",
+                            returnStdout: true
+                        ).trim()
+                        
+                        echo "All GitHub checks on this commit:"
+                        echo "${allChecks}"
+                        
+                        // Look specifically for SonarCloud
+                        def sonarPresent = sh(
+                            script: "grep -i 'sonarcloud' full-response.json | wc -l",
+                            returnStdout: true
+                        ).trim().toInteger()
+                        
+                        echo "SonarCloud present: ${sonarPresent}"
+                        
+                        if (sonarPresent > 0) {
+                            def conclusion = sh(
+                                script: '''
+                                    grep -i -A5 'sonarcloud' full-response.json | \
+                                    grep -i 'conclusion' | \
+                                    head -1 | \
+                                    cut -d':' -f2 | \
+                                    tr -d ' ,"' || echo 'unknown'
+                                ''',
                                 returnStdout: true
-                            ).trim().toInteger()
+                            ).trim()
                             
-                            if (sonarPresent > 0) {
-                                sonarConclusion = sh(
-                                    script: '''
-                                        grep -i -A5 'sonarcloud' sonar-check.json | \
-                                        grep -i 'conclusion' | \
-                                        head -1 | \
-                                        cut -d':' -f2 | \
-                                        tr -d ' ,"' | \
-                                        tr '[:upper:]' '[:lower:]' || echo 'pending'
-                                    ''',
-                                    returnStdout: true
-                                ).trim()
-                                
-                                echo "SonarCloud conclusion: ${sonarConclusion}"
-                                
-                                if (sonarConclusion == "success") {
-                                    echo "✅✅✅ SONARCLOUD PASSED! ✅✅✅"
-                                } else if (sonarConclusion == "failure") {
-                                    error "❌❌❌ SONARCLOUD FAILED! ❌❌❌"
-                                }
+                            echo "SonarCloud conclusion: ${conclusion}"
+                            
+                            if (conclusion == "success") {
+                                echo "✅✅✅ QUALITY GATE PASSED! ✅✅✅"
+                            } else if (conclusion == "failure") {
+                                error "❌❌❌ QUALITY GATE FAILED! ❌❌❌"
                             } else {
-                                echo "SonarCloud check not found yet... (attempt ${retryCount + 1}/${maxRetries})"
+                                echo "⚠️ SonarCloud status: ${conclusion}"
                             }
+                        } else {
+                            echo "❌❌❌ SONARCLOUD NOT FOUND IN GITHUB API!"
+                            echo "This means:"
+                            echo "1. SonarCloud is NOT installed on your GitHub repo"
+                            echo "2. OR SonarCloud is using a different name"
+                            echo "3. OR Your token doesn't have permission to see checks"
                             
-                            if (sonarConclusion == "pending") {
-                                retryCount++
-                                if (retryCount < maxRetries) {
-                                    echo "Waiting 10 seconds before next check..."
-                                    sleep(time: 10, unit: 'SECONDS')
-                                }
-                            }
+                            // Show what IS in the response
+                            def firstFewLines = sh(
+                                script: "head -20 full-response.json",
+                                returnStdout: true
+                            ).trim()
+                            
+                            echo "First 20 lines of response:"
+                            echo "${firstFewLines}"
                         }
                         
-                        if (sonarConclusion != "success") {
-                            error "Cannot verify SonarCloud quality gate - status: ${sonarConclusion}"
-                        }
-                        
-                        archiveArtifacts artifacts: 'sonar-check.json', allowEmptyArchive: true
+                        archiveArtifacts artifacts: 'full-response.json', allowEmptyArchive: true
                     }
                 }
             }

@@ -179,7 +179,6 @@ print('✅ Django initialized successfully')
                         }
                     }
                     
-                    // Save the project key for later stages
                     env.SONAR_PROJECT_KEY = projectKey
                 }
             }

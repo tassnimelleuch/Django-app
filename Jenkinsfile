@@ -34,7 +34,7 @@ pipeline {
         DOCKER_PUSH_TIMEOUT = '300'
         
         // GitHub/SonarCloud configuration
-        GITHUB_REPO = 'django-contact-app'
+        GITHUB_REPO = 'Django-app'
         GITHUB_OWNER = 'tassnimelleuch'
         GITHUB_TOKEN = credentials('github-token') // You need to add this credential in Jenkins
     }

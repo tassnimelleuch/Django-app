@@ -142,6 +142,7 @@ print('✅ Django initialized successfully')
         }
         
         // ===== THIS WILL ACTUALLY WORK AND FAIL IF SONARCLOUD FAILS =====
+        // ===== COMPLETELY FIXED SYNTAX - THIS WILL WORK =====
         stage('Verify SonarCloud Quality Gate') {
             steps {
                 withCredentials([string(credentialsId: 'github-token', variable: 'GITHUB_TOKEN')]) {
@@ -151,24 +152,22 @@ print('✅ Django initialized successfully')
                         
                         def maxRetries = 20
                         def retryCount = 0
-                        def sonarStatus = "pending"
-                        def sonarConclusion = "unknown"
+                        def sonarConclusion = "pending"
                         
-                        while (retryCount < maxRetries && sonarStatus == "pending") {
-                            // Get check runs with SECURE token handling
-                            sh(script: '''
+                        while (retryCount < maxRetries && sonarConclusion == "pending") {
+                            // FIXED: Proper string concatenation
+                            sh(script: """
                                 curl -s -H "Authorization: token $GITHUB_TOKEN" \
-                                "https://api.github.com/repos/'''${GITHUB_OWNER}'''/'''${GITHUB_REPO}'''/commits/'''${GIT_COMMIT}'''/check-runs" > sonar-check.json
-                            ''')
+                                "https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/commits/${GIT_COMMIT}/check-runs" > sonar-check.json
+                            """)
                             
-                            // Look for ANY SonarCloud check (case insensitive)
+                            // Check if SonarCloud exists
                             def sonarPresent = sh(
                                 script: "grep -i 'sonarcloud' sonar-check.json | wc -l",
                                 returnStdout: true
                             ).trim().toInteger()
                             
                             if (sonarPresent > 0) {
-                                // Extract conclusion
                                 sonarConclusion = sh(
                                     script: '''
                                         grep -i -A5 'sonarcloud' sonar-check.json | \
@@ -182,21 +181,11 @@ print('✅ Django initialized successfully')
                                 ).trim()
                                 
                                 echo "SonarCloud conclusion: ${sonarConclusion}"
-                                
-                                if (sonarConclusion == "success") {
-                                    sonarStatus = "success"
-                                } else if (sonarConclusion == "failure") {
-                                    sonarStatus = "failure"
-                                } else if (sonarConclusion == "pending") {
-                                    sonarStatus = "pending"
-                                } else {
-                                    sonarStatus = "unknown"
-                                }
                             } else {
                                 echo "SonarCloud check not found yet... (attempt ${retryCount + 1}/${maxRetries})"
                             }
                             
-                            if (sonarStatus == "pending") {
+                            if (sonarConclusion == "pending") {
                                 retryCount++
                                 if (retryCount < maxRetries) {
                                     echo "Waiting 10 seconds before next check..."
@@ -205,7 +194,7 @@ print('✅ Django initialized successfully')
                             }
                         }
                         
-                        // FINAL DECISION - THIS WILL FAIL THE PIPELINE IF SONAR FAILS
+                        // FINAL DECISION
                         echo "🔍 FINAL SonarCloud verification result: ${sonarConclusion}"
                         
                         if (sonarConclusion == "success") {
@@ -218,12 +207,7 @@ print('✅ Django initialized successfully')
                         else {
                             echo "⚠️⚠️⚠️ Could not verify SonarCloud status after ${maxRetries} attempts ⚠️⚠️⚠️"
                             echo "Please check manually: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
-                            
-                            // OPTION 1: FAIL SAFE - Uncomment to fail if can't verify
-                            // error("Cannot verify SonarCloud quality gate status")
-                            
-                            // OPTION 2: TRUST BUT VERIFY - Comment this out if you want to fail
-                            echo "⚠️ Proceeding but verify manually: ${sonarConclusion}"
+                            error("Cannot verify SonarCloud quality gate status - manual check required")
                         }
                         
                         archiveArtifacts artifacts: 'sonar-check.json', allowEmptyArchive: true
@@ -231,7 +215,6 @@ print('✅ Django initialized successfully')
                 }
             }
         }
-        
         stage('Docker Build and Push') {
             when {
                 expression { fileExists('Dockerfile') }

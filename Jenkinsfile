@@ -351,7 +351,7 @@ print('✅ Django initialized successfully')
                     }
                 } else {
                     echo "⚠️ SonarCloud report file not found. Analysis may still be processing."
-                    echo "🔗 Check manually at: https://sonarcloud.io/dashboard?id=django-contact-app-${BUILD_NUMBER}"
+                    echo "🔗 Check manually at: https://sonarcloud.io/dashboard?id=django-contact-app"
                 }
             }
             

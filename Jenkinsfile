@@ -142,7 +142,6 @@ print('✅ Django initialized successfully')
         }
         
         // ===== THIS WILL ACTUALLY WORK AND FAIL IF SONARCLOUD FAILS =====
-        // ===== COMPLETELY FIXED SYNTAX - THIS WILL WORK =====
         stage('Verify SonarCloud Quality Gate') {
             steps {
                 withCredentials([usernamePassword(

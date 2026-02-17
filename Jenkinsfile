@@ -5,7 +5,6 @@ pipeline {
         buildDiscarder(logRotator(numToKeepStr: '10'))
         timeout(time: 30, unit: 'MINUTES')
     }
-    
     environment {
         PYTHON = sh(script: 'which python3 || which python', returnStdout: true).trim()
         VENV_DIR = 'venv'
@@ -34,13 +33,13 @@ pipeline {
         DOCKER_PUSH_DELAY = '15'
         DOCKER_PUSH_TIMEOUT = '300'
         
-        // ===== SonarCloud Configuration =====
-        SONAR_PROJECT_KEY = 'django-contact-app'  // This NEVER changes
-        SONAR_ORGANIZATION = 'tassnimelleuch'      // Your GitHub/SonarCloud org
+        // ===== FIXED: Use the GitHub-linked project key =====
+        SONAR_PROJECT_KEY = 'Django-app'  // This matches your GitHub project
+        SONAR_ORGANIZATION = 'tassnimelleuch'
         
-        GITHUB_REPO = 'django-contact-app'  // Your GitHub repo name
-        GITHUB_OWNER = 'tassnimelleuch'      // Your GitHub username
-    }
+        GITHUB_REPO = 'django-contact-app'
+        GITHUB_OWNER = 'tassnimelleuch'
+}
     
     stages {
         stage('Clean Workspace') {

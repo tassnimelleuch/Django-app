@@ -12,7 +12,6 @@ pipeline {
         PIP = "${VENV_DIR}/bin/pip"
         PYTEST = "${VENV_DIR}/bin/pytest"
         PYLINT = "${VENV_DIR}/bin/pylint"
-        PYLINT_THRESHOLD = '9.00'
         DJANGO_SETTINGS_MODULE = 'myproject.settings'
         SECRET_KEY = sh(script: 'python3 -c "import secrets; print(secrets.token_urlsafe(50))"', returnStdout: true).trim()
         
@@ -34,10 +33,9 @@ pipeline {
         DOCKER_PUSH_DELAY = '15'
         DOCKER_PUSH_TIMEOUT = '300'
         
-        // ===== FIXED: Use the GitHub-linked project key =====
-        SONAR_PROJECT_KEY = 'Django-app'  // This matches your GitHub project
+        // SonarCloud configuration
+        SONAR_PROJECT_KEY = 'tassnimelleuch_django-contact-app'  // Format: OWNER_REPO
         SONAR_ORGANIZATION = 'tassnimelleuch'
-        
         GITHUB_REPO = 'django-contact-app'
         GITHUB_OWNER = 'tassnimelleuch'
     }
@@ -71,15 +69,13 @@ pipeline {
                         echo "Installing/upgrading pip..."
                         ${PIP} install --upgrade pip setuptools wheel
                         
-                        ${PIP} install pylint-pytest
-                        
                         if [ -f requirements.txt ]; then
                             echo "Installing from requirements.txt..."
                             ${PIP} install -r requirements.txt
                             echo "✅ Dependencies installed"
                         else
                             echo "Installing Django and test tools..."
-                            ${PIP} install django pytest pytest-django pytest-cov pylint pylint-pytest
+                            ${PIP} install django pytest pytest-django pytest-cov pylint
                             echo "✅ Basic packages installed"
                         fi
                     '''
@@ -145,68 +141,47 @@ print('✅ Django initialized successfully')
             }
         }
         
-        // ===== FIXED: SonarCloud with proper branch handling =====
+        // ===== SIMPLIFIED SonarCloud Analysis =====
         stage('SonarCloud Analysis') {
             steps {
                 script {
                     echo "📊 Running SonarCloud analysis for project: ${SONAR_PROJECT_KEY}"
-                    echo "🔗 View results at: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
                     
-                    // Determine if this is a PR or branch build
+                    // Determine branch/PR context
                     def isPullRequest = env.CHANGE_ID != null
-                    def prId = isPullRequest ? env.CHANGE_ID : ''
                     def branchName = isPullRequest ? env.CHANGE_BRANCH : (env.BRANCH_NAME ?: 'main')
-                    def baseBranch = isPullRequest ? env.CHANGE_TARGET : ''
                     
                     withSonarQubeEnv('sonarcloud') {
-                        def scannerHome = tool name: 'SonarScanner', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
-                        
-                        withEnv(["PATH+SCANNER=${scannerHome}/bin"]) {
-                            withCredentials([string(credentialsId: 'sonar-cloud', variable: 'SONAR_TOKEN')]) {
-                                def sonarCommand = """
-                                    sonar-scanner \
-                                        -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
-                                        -Dsonar.organization=${SONAR_ORGANIZATION} \
-                                        -Dsonar.projectName="Django Contact App" \
-                                        -Dsonar.projectVersion=${BUILD_NUMBER} \
-                                        -Dsonar.sources=. \
-                                        -Dsonar.exclusions=**/migrations/**,**/__pycache__/**,**/*.pyc,venv/**,**/.git/**,coverage.xml,junit-results.xml,pylint-report.json \
-                                        -Dsonar.tests=. \
-                                        -Dsonar.test.inclusions=**/test*.py,**/tests/** \
-                                        -Dsonar.python.coverage.reportPaths=coverage.xml \
-                                        -Dsonar.python.xunit.reportPath=junit-results.xml \
-                                        -Dsonar.python.pylint.reportPaths=pylint-report.json \
-                                        -Dsonar.python.version=3 \
-                                        -Dsonar.sourceEncoding=UTF-8 \
-                                        -Dsonar.host.url=https://sonarcloud.io \
-                                        -Dsonar.token=\${SONAR_TOKEN}
-                                """
-                                
-                                if (isPullRequest) {
-                                    sonarCommand += """
-                                        -Dsonar.pullrequest.key=${prId} \
-                                        -Dsonar.pullrequest.branch=${branchName} \
-                                        -Dsonar.pullrequest.base=${baseBranch} \
-                                        -Dsonar.pullrequest.provider=GitHub \
-                                        -Dsonar.pullrequest.github.repository=${GITHUB_OWNER}/${GITHUB_REPO}
-                                    """
-                                } else {
-                                    sonarCommand += " -Dsonar.branch.name=${branchName}"
-                                }
-                                
-                                sh sonarCommand
-                            }
+                        withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
+                            // Simple sonar-scanner command - GitHub integration is automatic
+                            sh """
+                                sonar-scanner \
+                                    -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                                    -Dsonar.organization=${SONAR_ORGANIZATION} \
+                                    -Dsonar.sources=. \
+                                    -Dsonar.exclusions=**/migrations/**,**/__pycache__/**,**/*.pyc,venv/**,**/.git/**,coverage.xml,junit-results.xml,pylint-report.json \
+                                    -Dsonar.tests=. \
+                                    -Dsonar.test.inclusions=**/test*.py,**/tests/** \
+                                    -Dsonar.python.coverage.reportPaths=coverage.xml \
+                                    -Dsonar.python.xunit.reportPath=junit-results.xml \
+                                    -Dsonar.python.pylint.reportPaths=pylint-report.json \
+                                    -Dsonar.python.version=3 \
+                                    -Dsonar.sourceEncoding=UTF-8 \
+                                    -Dsonar.host.url=https://sonarcloud.io \
+                                    -Dsonar.token=\${SONAR_TOKEN}
+                            """
                         }
                     }
                 }
             }
         }
         
+        // ===== Quality Gate Check =====
         stage('Quality Gate Check') {
             steps {
                 script {
                     echo "🔍 Checking SonarCloud Quality Gate..."
-                    echo "⏳ This will update GitHub with the status (✅/❌)..."
+                    echo "⏳ This will update GitHub with the status..."
                     
                     timeout(time: 3, unit: 'MINUTES') {
                         try {
@@ -218,6 +193,7 @@ print('✅ Django initialized successfully')
                             } else if (qg.status == 'WARN') {
                                 echo "⚠️⚠️⚠️ QUALITY GATE WARNING ⚠️⚠️⚠️"
                                 echo "⚠️ GitHub will show yellow warning"
+                                error("Quality Gate warning - failing pipeline")
                             } else if (qg.status == 'ERROR') {
                                 echo "❌❌❌ QUALITY GATE FAILED ❌❌❌"
                                 echo "❌ GitHub will show red X"

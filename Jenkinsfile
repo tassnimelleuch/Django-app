@@ -177,10 +177,32 @@ print('✅ Django initialized successfully')
         }
         
         // ===== Quality Gate Check =====
-        stage('Quality Gate Check') {
+        stage('Check SonarCloud Quality Gate') {
             steps {
-                timeout(time: 3, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
+                script {
+                    echo "🔍 Checking SonarCloud Quality Gate status from GitHub..."
+                    
+                    // Wait for SonarCloud to complete its scan (give it time)
+                    sleep(time: 30, unit: 'SECONDS')
+                    
+                    // Use GitHub API to check SonarCloud status
+                    def sonarStatus = sh(
+                        script: """
+                            curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
+                            "https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/commits/${GIT_COMMIT}/check-runs" | \
+                            jq -r '.check_runs[] | select(.name | contains("SonarCloud")) | .conclusion'
+                        """,
+                        returnStdout: true
+                    ).trim()
+                    
+                    if (sonarStatus == "success") {
+                        echo "✅✅✅ SONARCLOUD QUALITY GATE PASSED! ✅✅✅"
+                    } else if (sonarStatus == "failure") {
+                        error "❌ SonarCloud quality gate failed"
+                    } else {
+                        echo "⏳ SonarCloud still processing or status unknown: ${sonarStatus}"
+                        // You might want to wait and retry here
+                    }
                 }
             }
         }

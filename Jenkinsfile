@@ -82,30 +82,41 @@ pipeline {
                 }
             }
         }
-                
+        
+        // ===== FIXED DJANGO INITIALIZATION STAGE =====
         stage('Initialize Django') {
             steps {
                 script {
                     echo "🔧 Initializing Django with test SECRET_KEY..."
-                    sh '''
-                        ${VENV_DIR}/bin/python -c "
-        import os
-        import sys
-        os.environ['SECRET_KEY'] = '${SECRET_KEY}'
-        os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'myproject.settings')
-        try:
-            import django
-            django.setup()
-            print('✅ Django initialized successfully')
-            sys.exit(0)
-        except Exception as e:
-            print(f'❌ Django initialization failed: {e}')
-            sys.exit(1)
-        "
-                    '''
+                    
+                    // Write Python script to a file (NO INDENTATION ISSUES!)
+                    writeFile file: 'init_django.py', text: """
+import os
+import sys
+
+# Set the secret key from environment
+os.environ['SECRET_KEY'] = '${SECRET_KEY}'
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'myproject.settings')
+
+try:
+    import django
+    django.setup()
+    print('✅ Django initialized successfully')
+    sys.exit(0)
+except Exception as e:
+    print(f'❌ Django initialization failed: {e}')
+    sys.exit(1)
+"""
+                    
+                    // Execute the Python file
+                    sh '${VENV_DIR}/bin/python init_django.py'
+                    
+                    // Clean up
+                    sh 'rm -f init_django.py'
                 }
             }
-        }     
+        }
+        
         stage('Run Pytest with Coverage') {
             steps {
                 script {
@@ -146,7 +157,6 @@ pipeline {
             }
         }
         
-        // ===== THIS WILL ACTUALLY WORK AND FAIL IF SONARCLOUD FAILS =====
         stage('Verify SonarCloud Quality Gate') {
             steps {
                 withCredentials([usernamePassword(
@@ -158,21 +168,16 @@ pipeline {
                         echo "🔍 VERIFYING SonarCloud quality gate from GitHub..."
                         echo "🔗 SonarCloud Dashboard: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
                         
-                        // SOLUTION: Pass variables through environment, not string interpolation
                         withEnv([
                             "GITHUB_TOKEN=${GITHUB_TOKEN}",
                             "GITHUB_OWNER=${GITHUB_OWNER}",
                             "GITHUB_REPO=${GITHUB_REPO}",
                             "GIT_COMMIT=${GIT_COMMIT}"
                         ]) {
-                            // Use SINGLE quotes for the script - no Groovy interpolation!
                             sh '''
                                 #!/bin/bash
-                                # All variables come from environment, not Groovy interpolation
-                                
                                 echo "Fetching check runs from GitHub API..."
                                 
-                                # Use curl with environment variables (safe!)
                                 curl -s -H "Authorization: token $GITHUB_TOKEN" \
                                     "https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/commits/${GIT_COMMIT}/check-runs" > full-response.json
                                 
@@ -180,11 +185,9 @@ pipeline {
                                 cat full-response.json
                                 echo "===== END RESPONSE ====="
                                 
-                                # Check if SonarCloud exists in the response
                                 if grep -i "sonarcloud" full-response.json > /dev/null; then
                                     echo "✅ SonarCloud check found"
                                     
-                                    # Extract the conclusion
                                     CONCLUSION=$(grep -i -A5 "sonarcloud" full-response.json | \
                                                 grep -i "conclusion" | \
                                                 head -1 | \
@@ -213,19 +216,18 @@ pipeline {
                                 fi
                             '''
                             
-                            // Read the conclusion from file (safer than parsing in Groovy)
                             if (fileExists('sonarcloud-status.txt')) {
                                 def conclusion = readFile('sonarcloud-status.txt').trim()
                                 echo "SonarCloud conclusion from file: ${conclusion}"
                             }
                         }
                         
-                        // Archive artifacts regardless
                         archiveArtifacts artifacts: 'full-response.json', allowEmptyArchive: true
                     }
                 }
             }
         }
+        
         stage('Docker Build and Push') {
             when {
                 expression { fileExists('Dockerfile') }
@@ -329,7 +331,7 @@ pipeline {
             
             sh '''
                 rm -rf ${VENV_DIR} || true
-                rm -f coverage.xml junit-results.xml pylint-report.json sonar-check.json || true
+                rm -f coverage.xml junit-results.xml pylint-report.json sonar-check.json init_django.py || true
             '''
             
             echo "✅ Pipeline execution completed"
@@ -350,8 +352,3 @@ pipeline {
         }
     }
 }
-
-
-
-
-

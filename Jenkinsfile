@@ -82,7 +82,7 @@ pipeline {
                 }
             }
         }
-        
+                
         stage('Initialize Django') {
             steps {
                 script {
@@ -105,8 +105,7 @@ pipeline {
                     '''
                 }
             }
-        }
-                
+        }     
         stage('Run Pytest with Coverage') {
             steps {
                 script {

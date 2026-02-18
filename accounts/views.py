@@ -20,7 +20,7 @@ def dashboard(request):
 
 # UNSAFE METHODS - All POST-only views have CSRF protection via global middleware
 @require_http_methods(['POST'])
-@csrf_protect  # NOSONAR (S4502) - CSRF is enabled globally, this is explicit documentation
+@csrf_protect  
 def user_logout(request):
     """Log the user out and redirect to login page."""
     logout(request)
@@ -147,7 +147,7 @@ def edit_contact(request, contact_id):
 
 @login_required
 @require_http_methods(['POST'])
-@csrf_protect  # NOSONAR (S4502) - POST-only deletion with CSRF and authentication
+@csrf_protect  
 def delete_contact(request, contact_id):
     """Handle deleting a contact."""
     contact = get_object_or_404(Contact, id=contact_id, user=request.user)
@@ -190,7 +190,7 @@ def edit_phone(request, phone_id):
 
 @login_required
 @require_http_methods(['POST'])
-@csrf_protect  # NOSONAR (S4502) - POST-only deletion with CSRF and authentication
+@csrf_protect  
 def delete_phone(request, phone_id):
     """Handle deleting a phone number."""
     phone = get_object_or_404(
@@ -206,3 +206,57 @@ def delete_phone(request, phone_id):
         f'Phone number {phone_number} deleted!'
     )
     return redirect('contact_detail', contact_id=contact.id)
+
+
+
+@login_required
+@require_http_methods(['POST'])
+@csrf_protect 
+def delete_phone(request, phone_id):
+    """Handle deleting a phone number."""
+    phone = get_object_or_404(
+        PhoneNumber,
+        id=phone_id,
+        contact__user=request.user
+    )
+    contact = phone.contact
+    phone_number = phone.number
+    phone.delete()
+    messages.success(
+        request,
+        f'Phone number {phone_number} deleted!'
+    )
+    return redirect('contact_detail', contact_id=contact.id)
+
+
+    
+@login_required
+@require_http_methods(['POST'])
+@csrf_protect 
+def delete_phone(request, phone_id):
+    """Handle deleting a phone number."""
+    phone = get_object_or_404(
+        PhoneNumber,
+        id=phone_id,
+        contact__user=request.user
+    )
+    contact = phone.contact
+    phone_number = phone.number
+    phone.delete()
+    messages.success(
+        request,
+        f'Phone number {phone_number} deleted!'
+    )
+    return redirect('contact_detail', contact_id=contact.id)
+
+
+
+
+def testing_security():
+    
+    password = "this is a function to test if pipeline fails if sonar fails"
+
+    
+
+
+    

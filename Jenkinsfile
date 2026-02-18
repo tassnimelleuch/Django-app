@@ -265,7 +265,7 @@ pipeline {
                     """
                     
                     echo "✅ Docker image built: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
-                    echo "📤 Pushing Docker images to Docker Hub..."
+                    echo " Pushing Docker images to Docker Hub..."
                     
                     sh '''
                         echo "Logging into Docker Hub..."

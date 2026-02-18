@@ -251,7 +251,7 @@ def delete_phone(request, phone_id):
 
 
 
-
+#I will remove this later
 def testing_security():
     
     password = "this is a function to test if pipeline fails if sonar fails"

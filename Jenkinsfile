@@ -153,7 +153,6 @@ print('✅ Django initialized successfully')
                         echo "🔍 VERIFYING SonarCloud quality gate from GitHub..."
                         echo "🔗 SonarCloud Dashboard: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
                         
-                        // DEBUG: Save the FULL response
                         sh(script: """
                             curl -s -H "Authorization: token $GITHUB_TOKEN" \
                             "https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/commits/${GIT_COMMIT}/check-runs" > full-response.json

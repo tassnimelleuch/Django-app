@@ -33,6 +33,7 @@ pipeline {
         DOCKER_PUSH_DELAY = '15'
         DOCKER_PUSH_TIMEOUT = '300'
         
+        // GitHub/SonarCloud configuration
         GITHUB_REPO = 'Django-app'
         GITHUB_OWNER = 'tassnimelleuch'
         SONAR_PROJECT_KEY = 'tassnimelleuch_Django-app'
@@ -90,8 +91,10 @@ pipeline {
                     writeFile file: 'init_django.py', text: """
 import os
 import sys
+
 os.environ['SECRET_KEY'] = '${SECRET_KEY}'
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'myproject.settings')
+
 try:
     import django
     django.setup()
@@ -112,9 +115,11 @@ except Exception as e:
             steps {
                 script {
                     echo "🧪 Running Pytest with coverage..."
+                    
                     sh """
                         export DJANGO_SETTINGS_MODULE=${DJANGO_SETTINGS_MODULE}
                         export SECRET_KEY='${SECRET_KEY}'
+                        
                         ${PYTEST} accounts \
                             --cov \
                             --cov-report=term \
@@ -146,89 +151,82 @@ except Exception as e:
             }
         }
         
-        // ===== FINAL FIX - NO WARNINGS, EVER =====
+        // ===== COMPLETELY REWRITTEN - NO WARNINGS =====
         stage('Verify SonarCloud Quality Gate') {
             steps {
-                withCredentials([string(
-                    credentialsId: 'github-token',
-                    variable: 'GITHUB_TOKEN'
+                withCredentials([usernamePassword(
+                    credentialsId: 'github-token', 
+                    usernameVariable: 'GITHUB_USER',
+                    passwordVariable: 'GITHUB_TOKEN'
                 )]) {
                     script {
                         echo "🔍 VERIFYING SonarCloud quality gate from GitHub..."
                         echo "🔗 SonarCloud Dashboard: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
-                        
-                        // Write the script WITH THE TOKEN HARDCODED (but only in the file, not in Groovy)
-                        sh """
-                            cat > check-sonarcloud.sh << 'EOF'
-#!/bin/bash
-set -e
 
-# Token is written directly to the file - no Groovy interpolation in execution!
-GITHUB_TOKEN="${GITHUB_TOKEN}"
-GITHUB_OWNER="${GITHUB_OWNER}"
-GITHUB_REPO="${GITHUB_REPO}"
-GIT_COMMIT="${GIT_COMMIT}"
+                        writeFile file: 'check-sonarcloud.sh', text: '''#!/bin/bash
+        set -e
 
-echo "Fetching check runs from GitHub API..."
-curl -s -H "Authorization: token \$GITHUB_TOKEN" \\
-    "https://api.github.com/repos/\${GITHUB_OWNER}/\${GITHUB_REPO}/commits/\${GIT_COMMIT}/check-runs" > full-response.json
+        echo "Fetching check runs from GitHub API..."
+        curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/commits/${GIT_COMMIT}/check-runs" > full-response.json
 
-echo "===== FULL GITHUB RESPONSE ====="
-cat full-response.json
-echo "===== END RESPONSE ====="
+        echo "===== FULL GITHUB RESPONSE ====="
+        cat full-response.json
+        echo "===== END RESPONSE ====="
 
-if grep -i "sonarcloud" full-response.json > /dev/null; then
-    echo "✅ SonarCloud check found"
-    
-    CONCLUSION=\$(grep -i -A5 "sonarcloud" full-response.json | \\
-                grep -i "conclusion" | \\
-                head -1 | \\
-                cut -d':' -f2 | \\
-                tr -d ' ,"')
-    
-    echo "\$CONCLUSION" > sonarcloud-conclusion.txt
-    
-    case "\$CONCLUSION" in
-        "success")
-            echo "✅✅✅ QUALITY GATE PASSED! ✅✅✅"
-            ;;
-        "failure")
-            echo "❌❌❌ QUALITY GATE FAILED! ❌❌❌"
+        if grep -i "sonarcloud" full-response.json > /dev/null; then
+            echo "✅ SonarCloud check found"
+
+            CONCLUSION=$(grep -i -A5 "sonarcloud" full-response.json | \
+                        grep -i "conclusion" | \
+                        head -1 | \
+                        cut -d':' -f2 | \
+                        tr -d \' ,\")
+
+            echo "SONARCLOUD_CONCLUSION=$CONCLUSION" > sonarcloud-status.txt
+
+            case "$CONCLUSION" in
+                "success")
+                    echo "✅✅✅ QUALITY GATE PASSED! ✅✅✅"
+                    ;;
+                "failure")
+                    echo "❌❌❌ QUALITY GATE FAILED! ❌❌❌"
+                    exit 1
+                    ;;
+                *)
+                    echo "⚠️ SonarCloud status: $CONCLUSION"
+                    ;;
+            esac
+        else
+            echo "❌❌❌ SONARCLOUD NOT FOUND IN GITHUB API!"
+            head -20 full-response.json
             exit 1
-            ;;
-        *)
-            echo "⚠️ SonarCloud status: \$CONCLUSION"
-            ;;
-    esac
-else
-    echo "❌❌❌ SONARCLOUD NOT FOUND IN GITHUB API!"
-    echo "First 20 lines of response:"
-    head -20 full-response.json
-    exit 1
-fi
-EOF
-"""
-                        
-                        // Make executable and run
+        fi
+        '''
+
                         sh 'chmod +x check-sonarcloud.sh'
-                        sh './check-sonarcloud.sh'
-                        
-                        // Read the conclusion
-                        if (fileExists('sonarcloud-conclusion.txt')) {
-                            def conclusion = readFile('sonarcloud-conclusion.txt').trim()
-                            echo "SonarCloud conclusion: ${conclusion}"
+
+                        // ✅ Use single quotes so Groovy does NOT interpolate anything
+                        // All variables are resolved by the shell, not Groovy
+                        withEnv([
+                            "GITHUB_OWNER=${GITHUB_OWNER}",
+                            "GITHUB_REPO=${GITHUB_REPO}",
+                            "GIT_COMMIT=${GIT_COMMIT}"
+                        ]) {
+                            sh './check-sonarcloud.sh'
                         }
-                        
-                        // Archive results
+
+                        if (fileExists('sonarcloud-status.txt')) {
+                            def conclusion = readFile('sonarcloud-status.txt').trim()
+                            echo "SonarCloud conclusion from file: ${conclusion}"
+                        }
+
+                        sh 'rm -f check-sonarcloud.sh'
                         archiveArtifacts artifacts: 'full-response.json', allowEmptyArchive: true
-                        
-                        // Clean up
-                        sh 'rm -f check-sonarcloud.sh sonarcloud-conclusion.txt'
                     }
                 }
             }
         }
-        
         stage('Docker Build and Push') {
             when {
                 expression { fileExists('Dockerfile') }
@@ -273,16 +271,54 @@ EOF
                             .
                     """
                     
-                    echo "✅ Docker image built"
+                    echo "✅ Docker image built: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
+                    echo "📤 Pushing Docker images to Docker Hub..."
                     
                     sh '''
+                        echo "Logging into Docker Hub..."
                         echo "$DOCKER_HUB_CREDS_PSW" | docker login -u "$DOCKER_HUB_CREDS_USR" --password-stdin
                         
-                        docker push ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}
-                        docker push ${DOCKER_IMAGE_NAME}:latest
+                        push_with_retry() {
+                            local IMAGE=$1
+                            local TAG=$2
+                            local MAX_RETRIES=${DOCKER_PUSH_RETRIES}
+                            local DELAY=${DOCKER_PUSH_DELAY}
+                            local TIMEOUT=${DOCKER_PUSH_TIMEOUT}
+                            
+                            for i in $(seq 1 ${MAX_RETRIES}); do
+                                echo "Push attempt $i of ${MAX_RETRIES} for ${IMAGE}:${TAG}..."
+                                
+                                if timeout ${TIMEOUT} docker push ${IMAGE}:${TAG}; then
+                                    echo "✅ Successfully pushed ${IMAGE}:${TAG}"
+                                    return 0
+                                else
+                                    if [ $i -eq ${MAX_RETRIES} ]; then
+                                        echo "❌ Failed to push after ${MAX_RETRIES} attempts"
+                                        return 1
+                                    fi
+                                    
+                                    echo "Waiting ${DELAY} seconds before retry..."
+                                    sleep ${DELAY}
+                                fi
+                            done
+                        }
+                        
+                        push_with_retry "${DOCKER_IMAGE_NAME}" "${DOCKER_IMAGE_TAG}" || exit 1
+                        push_with_retry "${DOCKER_IMAGE_NAME}" "latest" || exit 1
                         
                         docker logout
+                        
+                        echo "✅✅✅ DOCKER PUSH COMPLETED SUCCESSFULLY! ✅✅✅"
                     '''
+                }
+            }
+            post {
+                failure {
+                    echo "❌❌❌ DOCKER BUILD OR PUSH FAILED AFTER MULTIPLE RETRIES ❌❌❌"
+                    sh 'docker logout || true'
+                }
+                success {
+                    echo "✅ Docker build and push completed successfully"
                 }
             }
         }
@@ -290,8 +326,13 @@ EOF
     
     post {
         always {
-            archiveArtifacts artifacts: 'coverage.xml, junit-results.xml, pylint-report.json', allowEmptyArchive: true
-            sh 'rm -rf ${VENV_DIR} || true'
+            archiveArtifacts artifacts: 'coverage.xml, junit-results.xml, pylint-report.json, sonar-check.json', allowEmptyArchive: true
+            
+            sh '''
+                rm -rf ${VENV_DIR} || true
+                rm -f coverage.xml junit-results.xml pylint-report.json sonar-check.json init_django.py check-sonarcloud.sh || true
+            '''
+            
             echo "✅ Pipeline execution completed"
         }
         
@@ -299,11 +340,14 @@ EOF
             echo "✅✅✅ PIPELINE SUCCESSFUL! ✅✅✅"
             echo "📅 Build: ${HUMAN_READABLE_DATE} (#${BUILD_NUMBER})"
             echo "🐳 Docker image: ${env.DOCKER_IMAGE_NAME}:${env.DOCKER_IMAGE_TAG}"
+            echo "📦 View on Docker Hub: https://hub.docker.com/r/${env.DOCKER_IMAGE_NAME}/tags"
+            echo "📊 View on SonarCloud: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
         }
         
         failure {
             echo "❌❌❌ PIPELINE FAILED ❌❌❌"
             echo "📅 Build: ${HUMAN_READABLE_DATE} (#${BUILD_NUMBER})"
+            echo "📊 SonarCloud results: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
         }
     }
 }

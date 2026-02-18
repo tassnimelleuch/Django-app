@@ -88,14 +88,11 @@ pipeline {
                 script {
                     echo "🔧 Initializing Django with test SECRET_KEY..."
                     sh '''
-                        ${VENV_DIR}/bin/python << 'EOF'
+                        ${VENV_DIR}/bin/python -c "
         import os
         import sys
-
-        # Set the secret key
         os.environ['SECRET_KEY'] = '${SECRET_KEY}'
         os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'myproject.settings')
-
         try:
             import django
             django.setup()
@@ -104,7 +101,7 @@ pipeline {
         except Exception as e:
             print(f'❌ Django initialization failed: {e}')
             sys.exit(1)
-        EOF
+        "
                     '''
                 }
             }

@@ -33,7 +33,6 @@ pipeline {
         DOCKER_PUSH_DELAY = '15'
         DOCKER_PUSH_TIMEOUT = '300'
         
-        // GitHub/SonarCloud configuration
         GITHUB_REPO = 'Django-app'
         GITHUB_OWNER = 'tassnimelleuch'
         SONAR_PROJECT_KEY = 'tassnimelleuch_Django-app'
@@ -42,9 +41,14 @@ pipeline {
     stages {
         stage('Clean Workspace') {
             steps {
-                cleanWs()
-                checkout scm
-                echo "✅ Workspace cleaned and code checked out"
+                // ✅ Only delete generated files/folders, NOT the git repo
+                // This avoids a full re-clone which fails when GitHub is unreachable
+                sh '''
+                    rm -rf venv || true
+                    rm -f coverage.xml junit-results.xml pylint-report.json sonar-check.json || true
+                    rm -f init_django.py check-sonarcloud.sh full-response.json sonarcloud-status.txt || true
+                    echo "✅ Workspace cleaned (build artifacts removed)"
+                '''
                 script {
                     echo "🏷️ Build: ${HUMAN_READABLE_DATE} (#${BUILD_NUMBER})"
                     echo "🐳 Docker tag: ${DOCKER_IMAGE_TAG}"
@@ -151,7 +155,6 @@ except Exception as e:
             }
         }
         
-        // ===== COMPLETELY REWRITTEN - NO WARNINGS =====
         stage('Verify SonarCloud Quality Gate') {
             steps {
                 withCredentials([usernamePassword(
@@ -162,52 +165,54 @@ except Exception as e:
                     script {
                         echo "🔍 VERIFYING SonarCloud quality gate from GitHub..."
                         echo "🔗 SonarCloud Dashboard: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
-
+                        
+                        // ✅ Triple single quotes: Groovy never interpolates $GITHUB_TOKEN
                         writeFile file: 'check-sonarcloud.sh', text: '''#!/bin/bash
-        set -e
+set -e
 
-        echo "Fetching check runs from GitHub API..."
-        curl -s -H "Authorization: token $GITHUB_TOKEN" \
-            "https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/commits/${GIT_COMMIT}/check-runs" > full-response.json
+echo "Fetching check runs from GitHub API..."
+curl -s -H "Authorization: token $GITHUB_TOKEN" \
+    "https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/commits/${GIT_COMMIT}/check-runs" > full-response.json
 
-        echo "===== FULL GITHUB RESPONSE ====="
-        cat full-response.json
-        echo "===== END RESPONSE ====="
+echo "===== FULL GITHUB RESPONSE ====="
+cat full-response.json
+echo "===== END RESPONSE ====="
 
-        if grep -i "sonarcloud" full-response.json > /dev/null; then
-            echo "✅ SonarCloud check found"
-
-            CONCLUSION=$(grep -i -A5 "sonarcloud" full-response.json | \
-                        grep -i "conclusion" | \
-                        head -1 | \
-                        cut -d':' -f2 | \
-                        tr -d \' ,\")
-
-            echo "SONARCLOUD_CONCLUSION=$CONCLUSION" > sonarcloud-status.txt
-
-            case "$CONCLUSION" in
-                "success")
-                    echo "✅✅✅ QUALITY GATE PASSED! ✅✅✅"
-                    ;;
-                "failure")
-                    echo "❌❌❌ QUALITY GATE FAILED! ❌❌❌"
-                    exit 1
-                    ;;
-                *)
-                    echo "⚠️ SonarCloud status: $CONCLUSION"
-                    ;;
-            esac
-        else
-            echo "❌❌❌ SONARCLOUD NOT FOUND IN GITHUB API!"
-            head -20 full-response.json
+if grep -i "sonarcloud" full-response.json > /dev/null; then
+    echo "✅ SonarCloud check found"
+    
+    CONCLUSION=$(grep -i -A5 "sonarcloud" full-response.json | \
+                grep -i "conclusion" | \
+                head -1 | \
+                cut -d':' -f2 | \
+                tr -d ' ,"')
+    
+    echo "SONARCLOUD_CONCLUSION=$CONCLUSION" > sonarcloud-status.txt
+    
+    case "$CONCLUSION" in
+        "success")
+            echo "✅✅✅ QUALITY GATE PASSED! ✅✅✅"
+            ;;
+        "failure")
+            echo "❌❌❌ QUALITY GATE FAILED! ❌❌❌"
             exit 1
-        fi
-        '''
-
+            ;;
+        *)
+            echo "⚠️ SonarCloud status: $CONCLUSION"
+            ;;
+    esac
+else
+    echo "❌❌❌ SONARCLOUD NOT FOUND IN GITHUB API!"
+    echo "First 20 lines of response:"
+    head -20 full-response.json
+    exit 1
+fi
+'''
+                        
                         sh 'chmod +x check-sonarcloud.sh'
-
-                        // ✅ Use single quotes so Groovy does NOT interpolate anything
-                        // All variables are resolved by the shell, not Groovy
+                        
+                        // ✅ Single-quoted sh call + withEnv for non-sensitive vars
+                        // GITHUB_TOKEN is injected by withCredentials automatically
                         withEnv([
                             "GITHUB_OWNER=${GITHUB_OWNER}",
                             "GITHUB_REPO=${GITHUB_REPO}",
@@ -215,18 +220,19 @@ except Exception as e:
                         ]) {
                             sh './check-sonarcloud.sh'
                         }
-
+                        
                         if (fileExists('sonarcloud-status.txt')) {
                             def conclusion = readFile('sonarcloud-status.txt').trim()
                             echo "SonarCloud conclusion from file: ${conclusion}"
                         }
-
+                        
                         sh 'rm -f check-sonarcloud.sh'
                         archiveArtifacts artifacts: 'full-response.json', allowEmptyArchive: true
                     }
                 }
             }
         }
+        
         stage('Docker Build and Push') {
             when {
                 expression { fileExists('Dockerfile') }
@@ -330,7 +336,7 @@ except Exception as e:
             
             sh '''
                 rm -rf ${VENV_DIR} || true
-                rm -f coverage.xml junit-results.xml pylint-report.json sonar-check.json init_django.py check-sonarcloud.sh || true
+                rm -f coverage.xml junit-results.xml pylint-report.json sonar-check.json init_django.py check-sonarcloud.sh full-response.json sonarcloud-status.txt || true
             '''
             
             echo "✅ Pipeline execution completed"

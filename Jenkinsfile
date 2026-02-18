@@ -88,19 +88,28 @@ pipeline {
                 script {
                     echo "🔧 Initializing Django with test SECRET_KEY..."
                     sh '''
-                        ${VENV_DIR}/bin/python -c "
+                        ${VENV_DIR}/bin/python << 'EOF'
         import os
+        import sys
+
+        # Set the secret key
         os.environ['SECRET_KEY'] = '${SECRET_KEY}'
         os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'myproject.settings')
-        import django
-        django.setup()
-        print(' Django initialized successfully')
-                        "
+
+        try:
+            import django
+            django.setup()
+            print('✅ Django initialized successfully')
+            sys.exit(0)
+        except Exception as e:
+            print(f'❌ Django initialization failed: {e}')
+            sys.exit(1)
+        EOF
                     '''
                 }
             }
         }
-        
+                
         stage('Run Pytest with Coverage') {
             steps {
                 script {

@@ -14,25 +14,20 @@ pipeline {
         PYLINT = "${VENV_DIR}/bin/pylint"
         DJANGO_SETTINGS_MODULE = 'myproject.settings'
         SECRET_KEY = sh(script: 'python3 -c "import secrets; print(secrets.token_urlsafe(50))"', returnStdout: true).trim()
-        
         DOCKER_IMAGE_NAME = 'tasnimelleuchenis/django-contact-app'
-        
         DOCKER_IMAGE_TAG = sh(script: '''#!/bin/bash
             export LANG=C
             date "+%Y-%m-%d-at-%H-%M-%S-build-${BUILD_NUMBER}" | tr '[:upper:]' '[:lower:]' | sed 's/ /-/g'
         ''', returnStdout: true).trim()
-        
         HUMAN_READABLE_DATE = sh(script: '''#!/bin/bash
             export LANG=C
             date "+%Y-%m-%d at %H:%M:%S"
         ''', returnStdout: true).trim()
-        
         DOCKER_PULL_RETRIES = '5'
         DOCKER_PULL_DELAY = '10'
         DOCKER_PUSH_RETRIES = '5'
         DOCKER_PUSH_DELAY = '15'
         DOCKER_PUSH_TIMEOUT = '300'
-        
         GITHUB_REPO = 'Django-app'
         GITHUB_OWNER = 'tassnimelleuch'
         SONAR_PROJECT_KEY = 'tassnimelleuch_Django-app'
@@ -41,8 +36,6 @@ pipeline {
     stages {
         stage('Clean Workspace') {
             steps {
-                // ✅ Only delete generated files/folders, NOT the git repo
-                // This avoids a full re-clone which fails when GitHub is unreachable
                 sh '''
                     rm -rf venv || true
                     rm -f coverage.xml junit-results.xml pylint-report.json sonar-check.json || true
@@ -91,24 +84,22 @@ pipeline {
             steps {
                 script {
                     echo "🔧 Initializing Django with test SECRET_KEY..."
-                    
                     writeFile file: 'init_django.py', text: """
-import os
-import sys
-
-os.environ['SECRET_KEY'] = '${SECRET_KEY}'
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'myproject.settings')
-
-try:
-    import django
-    django.setup()
-    print('✅ Django initialized successfully')
-    sys.exit(0)
-except Exception as e:
-    print(f'❌ Django initialization failed: {e}')
-    sys.exit(1)
-"""
-                    
+                        import os
+                        import sys
+                        
+                        os.environ['SECRET_KEY'] = '${SECRET_KEY}'
+                        os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'myproject.settings')
+                        
+                        try:
+                            import django
+                            django.setup()
+                            print('✅ Django initialized successfully')
+                            sys.exit(0)
+                        except Exception as e:
+                            print(f'❌ Django initialization failed: {e}')
+                            sys.exit(1)
+                    """
                     sh '${VENV_DIR}/bin/python init_django.py'
                     sh 'rm -f init_django.py'
                 }
@@ -119,7 +110,6 @@ except Exception as e:
             steps {
                 script {
                     echo "🧪 Running Pytest with coverage..."
-                    
                     sh """
                         export DJANGO_SETTINGS_MODULE=${DJANGO_SETTINGS_MODULE}
                         export SECRET_KEY='${SECRET_KEY}'
@@ -158,7 +148,7 @@ except Exception as e:
         stage('Verify SonarCloud Quality Gate') {
             steps {
                 withCredentials([usernamePassword(
-                    credentialsId: 'github-token', 
+                    credentialsId: 'github-token',
                     usernameVariable: 'GITHUB_USER',
                     passwordVariable: 'GITHUB_TOKEN'
                 )]) {
@@ -166,53 +156,50 @@ except Exception as e:
                         echo "🔍 VERIFYING SonarCloud quality gate from GitHub..."
                         echo "🔗 SonarCloud Dashboard: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
                         
-                        // ✅ Triple single quotes: Groovy never interpolates $GITHUB_TOKEN
                         writeFile file: 'check-sonarcloud.sh', text: '''#!/bin/bash
-set -e
-
-echo "Fetching check runs from GitHub API..."
-curl -s -H "Authorization: token $GITHUB_TOKEN" \
-    "https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/commits/${GIT_COMMIT}/check-runs" > full-response.json
-
-echo "===== FULL GITHUB RESPONSE ====="
-cat full-response.json
-echo "===== END RESPONSE ====="
-
-if grep -i "sonarcloud" full-response.json > /dev/null; then
-    echo "✅ SonarCloud check found"
-    
-    CONCLUSION=$(grep -i -A5 "sonarcloud" full-response.json | \
-                grep -i "conclusion" | \
-                head -1 | \
-                cut -d':' -f2 | \
-                tr -d ' ,"')
-    
-    echo "SONARCLOUD_CONCLUSION=$CONCLUSION" > sonarcloud-status.txt
-    
-    case "$CONCLUSION" in
-        "success")
-            echo "✅✅✅ QUALITY GATE PASSED! ✅✅✅"
-            ;;
-        "failure")
-            echo "❌❌❌ QUALITY GATE FAILED! ❌❌❌"
-            exit 1
-            ;;
-        *)
-            echo "⚠️ SonarCloud status: $CONCLUSION"
-            ;;
-    esac
-else
-    echo "❌❌❌ SONARCLOUD NOT FOUND IN GITHUB API!"
-    echo "First 20 lines of response:"
-    head -20 full-response.json
-    exit 1
-fi
-'''
+                            set -e
+                            
+                            echo "Fetching check runs from GitHub API..."
+                            curl -s -H "Authorization: token $GITHUB_TOKEN" \
+                                "https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/commits/${GIT_COMMIT}/check-runs" > full-response.json
+                            
+                            echo "===== FULL GITHUB RESPONSE ====="
+                            cat full-response.json
+                            echo "===== END RESPONSE ====="
+                            
+                            if grep -i "sonarcloud" full-response.json > /dev/null; then
+                                echo "✅ SonarCloud check found"
+                                
+                                CONCLUSION=$(grep -i -A5 "sonarcloud" full-response.json | \
+                                    grep -i "conclusion" | \
+                                    head -1 | \
+                                    cut -d':' -f2 | \
+                                    tr -d ' ,"')
+                                
+                                echo "SONARCLOUD_CONCLUSION=$CONCLUSION" > sonarcloud-status.txt
+                                
+                                case "$CONCLUSION" in
+                                    "success")
+                                        echo "✅✅✅ QUALITY GATE PASSED! ✅✅✅"
+                                        ;;
+                                    "failure")
+                                        echo "❌❌❌ QUALITY GATE FAILED! ❌❌❌"
+                                        exit 1
+                                        ;;
+                                    *)
+                                        echo "⚠️ SonarCloud status: $CONCLUSION"
+                                        ;;
+                                esac
+                            else
+                                echo "❌❌❌ SONARCLOUD NOT FOUND IN GITHUB API!"
+                                echo "First 20 lines of response:"
+                                head -20 full-response.json
+                                exit 1
+                            fi
+                        '''
                         
                         sh 'chmod +x check-sonarcloud.sh'
                         
-                        // ✅ Single-quoted sh call + withEnv for non-sensitive vars
-                        // GITHUB_TOKEN is injected by withCredentials automatically
                         withEnv([
                             "GITHUB_OWNER=${GITHUB_OWNER}",
                             "GITHUB_REPO=${GITHUB_REPO}",
@@ -293,7 +280,6 @@ fi
                             
                             for i in $(seq 1 ${MAX_RETRIES}); do
                                 echo "Push attempt $i of ${MAX_RETRIES} for ${IMAGE}:${TAG}..."
-                                
                                 if timeout ${TIMEOUT} docker push ${IMAGE}:${TAG}; then
                                     echo "✅ Successfully pushed ${IMAGE}:${TAG}"
                                     return 0
@@ -302,7 +288,6 @@ fi
                                         echo "❌ Failed to push after ${MAX_RETRIES} attempts"
                                         return 1
                                     fi
-                                    
                                     echo "Waiting ${DELAY} seconds before retry..."
                                     sleep ${DELAY}
                                 fi
@@ -313,7 +298,6 @@ fi
                         push_with_retry "${DOCKER_IMAGE_NAME}" "latest" || exit 1
                         
                         docker logout
-                        
                         echo "✅✅✅ DOCKER PUSH COMPLETED SUCCESSFULLY! ✅✅✅"
                     '''
                 }
@@ -333,15 +317,12 @@ fi
     post {
         always {
             archiveArtifacts artifacts: 'coverage.xml, junit-results.xml, pylint-report.json, sonar-check.json', allowEmptyArchive: true
-            
             sh '''
                 rm -rf ${VENV_DIR} || true
                 rm -f coverage.xml junit-results.xml pylint-report.json sonar-check.json init_django.py check-sonarcloud.sh full-response.json sonarcloud-status.txt || true
             '''
-            
             echo "✅ Pipeline execution completed"
         }
-        
         success {
             echo "✅✅✅ PIPELINE SUCCESSFUL! ✅✅✅"
             echo "📅 Build: ${HUMAN_READABLE_DATE} (#${BUILD_NUMBER})"
@@ -349,7 +330,6 @@ fi
             echo "📦 View on Docker Hub: https://hub.docker.com/r/${env.DOCKER_IMAGE_NAME}/tags"
             echo "📊 View on SonarCloud: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
         }
-        
         failure {
             echo "❌❌❌ PIPELINE FAILED ❌❌❌"
             echo "📅 Build: ${HUMAN_READABLE_DATE} (#${BUILD_NUMBER})"

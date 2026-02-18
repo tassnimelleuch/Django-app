@@ -89,12 +89,12 @@ pipeline {
                     echo "🔧 Initializing Django with test SECRET_KEY..."
                     sh '''
                         ${VENV_DIR}/bin/python -c "
-                        import os
-                        os.environ['SECRET_KEY'] = '${SECRET_KEY}'
-                        os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'myproject.settings')
-                        import django
-                        django.setup()
-                        print('✅ Django initialized successfully')
+        import os
+        os.environ['SECRET_KEY'] = '${SECRET_KEY}'
+        os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'myproject.settings')
+        import django
+        django.setup()
+        print(' Django initialized successfully')
                         "
                     '''
                 }

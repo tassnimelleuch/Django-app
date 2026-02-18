@@ -89,12 +89,12 @@ pipeline {
                     echo "🔧 Initializing Django with test SECRET_KEY..."
                     sh '''
                         ${VENV_DIR}/bin/python -c "
-import os
-os.environ['SECRET_KEY'] = '${SECRET_KEY}'
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'myproject.settings')
-import django
-django.setup()
-print('✅ Django initialized successfully')
+                        import os
+                        os.environ['SECRET_KEY'] = '${SECRET_KEY}'
+                        os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'myproject.settings')
+                        import django
+                        django.setup()
+                        print('✅ Django initialized successfully')
                         "
                     '''
                 }
@@ -153,69 +153,69 @@ print('✅ Django initialized successfully')
                         echo "🔍 VERIFYING SonarCloud quality gate from GitHub..."
                         echo "🔗 SonarCloud Dashboard: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
                         
-                        sh(script: """
-                            curl -s -H "Authorization: token $GITHUB_TOKEN" \
-                            "https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/commits/${GIT_COMMIT}/check-runs" > full-response.json
-                            echo "===== FULL GITHUB RESPONSE ====="
-                            cat full-response.json
-                            echo "===== END RESPONSE ====="
-                        """, mask: true)    
-                        
-                        // Show all check runs
-                        def allChecks = sh(
-                            script: "grep -o '\"name\":\"[^\"]*\"' full-response.json || echo 'No checks found'",
-                            returnStdout: true
-                        ).trim()
-                        
-                        echo "All GitHub checks on this commit:"
-                        echo "${allChecks}"
-                        
-                        // Look specifically for SonarCloud
-                        def sonarPresent = sh(
-                            script: "grep -i 'sonarcloud' full-response.json | wc -l",
-                            returnStdout: true
-                        ).trim().toInteger()
-                        
-                        echo "SonarCloud present: ${sonarPresent}"
-                        
-                        if (sonarPresent > 0) {
-                            def conclusion = sh(
-                                script: '''
-                                    grep -i -A5 'sonarcloud' full-response.json | \
-                                    grep -i 'conclusion' | \
-                                    head -1 | \
-                                    cut -d':' -f2 | \
-                                    tr -d ' ,"' || echo 'unknown'
-                                ''',
-                                returnStdout: true
-                            ).trim()
+                        // SOLUTION: Pass variables through environment, not string interpolation
+                        withEnv([
+                            "GITHUB_TOKEN=${GITHUB_TOKEN}",
+                            "GITHUB_OWNER=${GITHUB_OWNER}",
+                            "GITHUB_REPO=${GITHUB_REPO}",
+                            "GIT_COMMIT=${GIT_COMMIT}"
+                        ]) {
+                            // Use SINGLE quotes for the script - no Groovy interpolation!
+                            sh '''
+                                #!/bin/bash
+                                # All variables come from environment, not Groovy interpolation
+                                
+                                echo "Fetching check runs from GitHub API..."
+                                
+                                # Use curl with environment variables (safe!)
+                                curl -s -H "Authorization: token $GITHUB_TOKEN" \
+                                    "https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/commits/${GIT_COMMIT}/check-runs" > full-response.json
+                                
+                                echo "===== FULL GITHUB RESPONSE ====="
+                                cat full-response.json
+                                echo "===== END RESPONSE ====="
+                                
+                                # Check if SonarCloud exists in the response
+                                if grep -i "sonarcloud" full-response.json > /dev/null; then
+                                    echo "✅ SonarCloud check found"
+                                    
+                                    # Extract the conclusion
+                                    CONCLUSION=$(grep -i -A5 "sonarcloud" full-response.json | \
+                                                grep -i "conclusion" | \
+                                                head -1 | \
+                                                cut -d':' -f2 | \
+                                                tr -d ' ,"')
+                                    
+                                    echo "SONARCLOUD_CONCLUSION=$CONCLUSION" > sonarcloud-status.txt
+                                    
+                                    case "$CONCLUSION" in
+                                        "success")
+                                            echo "✅✅✅ QUALITY GATE PASSED! ✅✅✅"
+                                            ;;
+                                        "failure")
+                                            echo "❌❌❌ QUALITY GATE FAILED! ❌❌❌"
+                                            exit 1
+                                            ;;
+                                        *)
+                                            echo "⚠️ SonarCloud status: $CONCLUSION"
+                                            ;;
+                                    esac
+                                else
+                                    echo "❌❌❌ SONARCLOUD NOT FOUND IN GITHUB API!"
+                                    echo "First 20 lines of response:"
+                                    head -20 full-response.json
+                                    exit 1
+                                fi
+                            '''
                             
-                            echo "SonarCloud conclusion: ${conclusion}"
-                            
-                            if (conclusion == "success") {
-                                echo "✅✅✅ QUALITY GATE PASSED! ✅✅✅"
-                            } else if (conclusion == "failure") {
-                                error "❌❌❌ QUALITY GATE FAILED! ❌❌❌"
-                            } else {
-                                echo "⚠️ SonarCloud status: ${conclusion}"
+                            // Read the conclusion from file (safer than parsing in Groovy)
+                            if (fileExists('sonarcloud-status.txt')) {
+                                def conclusion = readFile('sonarcloud-status.txt').trim()
+                                echo "SonarCloud conclusion from file: ${conclusion}"
                             }
-                        } else {
-                            echo "❌❌❌ SONARCLOUD NOT FOUND IN GITHUB API!"
-                            echo "This means:"
-                            echo "1. SonarCloud is NOT installed on your GitHub repo"
-                            echo "2. OR SonarCloud is using a different name"
-                            echo "3. OR Your token doesn't have permission to see checks"
-                            
-                            // Show what IS in the response
-                            def firstFewLines = sh(
-                                script: "head -20 full-response.json",
-                                returnStdout: true
-                            ).trim()
-                            
-                            echo "First 20 lines of response:"
-                            echo "${firstFewLines}"
                         }
                         
+                        // Archive artifacts regardless
                         archiveArtifacts artifacts: 'full-response.json', allowEmptyArchive: true
                     }
                 }
@@ -345,3 +345,8 @@ print('✅ Django initialized successfully')
         }
     }
 }
+
+
+
+
+

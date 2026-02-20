@@ -41,8 +41,7 @@ pipeline {
     stages {
         stage('Clean Workspace') {
             steps {
-                // ✅ Only delete generated files/folders, NOT the git repo
-                // This avoids a full re-clone which fails when GitHub is unreachable
+                
                 sh '''
                     rm -rf venv || true
                     rm -f coverage.xml junit-results.xml pylint-report.json sonar-check.json || true

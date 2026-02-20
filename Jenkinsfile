@@ -194,7 +194,7 @@ if grep -i "sonarcloud" full-response.json > /dev/null; then
             echo "✅✅✅ QUALITY GATE PASSED! ✅✅✅"
             ;;
         "failure")
-            echo "❌❌❌ QUALITY GATE FAILED! ❌❌❌"
+            echo "QUALITY GATE FAILED! "
             exit 1
             ;;
         *)

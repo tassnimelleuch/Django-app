@@ -202,7 +202,7 @@ if grep -i "sonarcloud" full-response.json > /dev/null; then
             ;;
     esac
 else
-    echo "❌❌❌ SONARCLOUD NOT FOUND IN GITHUB API!"
+    echo "SONARCLOUD NOT FOUND IN GITHUB API!"
     echo "First 20 lines of response:"
     head -20 full-response.json
     exit 1
@@ -211,7 +211,7 @@ fi
                         
                         sh 'chmod +x check-sonarcloud.sh'
                         
-                        // ✅ Single-quoted sh call + withEnv for non-sensitive vars
+                        // Single-quoted sh call + withEnv for non-sensitive vars
                         // GITHUB_TOKEN is injected by withCredentials automatically
                         withEnv([
                             "GITHUB_OWNER=${GITHUB_OWNER}",

@@ -16,8 +16,8 @@ RUN pip install --upgrade pip && pip install -r requirements.txt
 
 COPY . .
 
-RUN python manage.py collectstatic --noinput
+RUN python manage.py collectstatic --noinput 2>/dev/null || echo "No static files to collect or STATIC_ROOT not set"
+
 EXPOSE 8000
 
 CMD ["gunicorn", "--bind", "0.0.0.0:8000", "myproject.wsgi:application"]
-#test

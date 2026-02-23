@@ -157,7 +157,6 @@ def delete_contact(request, contact_id):
     messages.success(request, f"Contact {contact_name} deleted successfully!")
     return redirect('contact_list')
 
-
 @login_required
 @require_http_methods(['GET', 'POST'])
 @csrf_protect
@@ -200,5 +199,4 @@ def delete_phone(request, phone_id):
         messages.success(request, f"Phone number {phone.number} deleted successfully!")
         return redirect('contact_detail', contact.id)
 
-    # GET request → show confirmation page
     return render(request, 'accounts/delete_phone.html', {'phone': phone, 'contact': contact})

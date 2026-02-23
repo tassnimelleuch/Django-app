@@ -186,22 +186,16 @@ def edit_phone(request, phone_id):
         {'form': form, 'phone': phone, 'contact': contact}
     )
 
-
 @login_required
-@require_http_methods(['POST'])
-@csrf_protect
+@require_http_methods(["GET", "POST"])
 def delete_phone(request, phone_id):
-    """Handle deleting a phone number."""
-    phone = get_object_or_404(
-        PhoneNumber,
-        id=phone_id,
-        contact__user=request.user
-    )
+    phone = get_object_or_404(PhoneNumber, id=phone_id, contact__user=request.user)
     contact = phone.contact
-    phone_number = phone.number
-    phone.delete()
-    messages.success(
-        request,
-        f'Phone number {phone_number} deleted!'
-    )
-    return redirect('contact_detail', contact_id=contact.id)
+
+    if request.method == "POST":
+        phone.delete()
+        messages.success(request, f'Phone number {phone.number} deleted!')
+        return redirect('contact_detail', contact.id)
+
+    # updated path here
+    return render(request, 'accounts/delete_phone.html', {'phone': phone, 'contact': contact})

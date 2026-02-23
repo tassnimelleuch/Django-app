@@ -6,11 +6,23 @@
         body { font-family: Arial; margin: 40px; }
         .contact-header { background: #f0f8ff; padding: 20px; border-radius: 5px; }
         .section { margin: 30px 0; }
-        .btn { background: #4CAF50; color: white; padding: 8px 15px; text-decoration: none; display: inline-block; margin-right: 10px; }
+        .btn {
+            background: #4CAF50;
+            color: white;
+            padding: 8px 15px;
+            text-decoration: none;
+            display: inline-block;
+            margin-right: 10px;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .btn-danger { background: #f44336; }
         .phone-badge, .address-card { 
             background: #e8f5e8; padding: 10px; margin: 5px 0; 
             border-left: 3px solid #4CAF50;
         }
+        form { display: inline; }
     </style>
 </head>
 <body>
@@ -18,7 +30,9 @@
     
     <div class="contact-header">
         <h1>{{ contact.first_name }} {{ contact.last_name }}</h1>
+
         <p><strong>Email:</strong> {{ contact.email|default:"Not provided" }}</p>
+
         <p><strong>LinkedIn:</strong> 
             {% if contact.linkedin %}
                 <a href="{{ contact.linkedin }}" target="_blank">{{ contact.linkedin }}</a>
@@ -26,15 +40,27 @@
                 Not provided
             {% endif %}
         </p>
+
         <p><strong>Added:</strong> {{ contact.created_at|date:"F d, Y" }}</p>
+
         <div style="margin-top: 15px;">
             <a href="{% url 'edit_contact' contact.id %}" class="btn">✏️ Edit</a>
-            <a href="{% url 'delete_contact' contact.id %}" class="btn" style="background: #f44336;">🗑️ Delete</a>
+
+            <!-- ✅ FIXED DELETE -->
+            <form method="post" action="{% url 'delete_contact' contact.id %}">
+                {% csrf_token %}
+                <button type="submit"
+                        class="btn btn-danger"
+                        onclick="return confirm('Are you sure you want to delete this contact?');">
+                    🗑️ Delete
+                </button>
+            </form>
         </div>
     </div>
     
     <div class="section">
         <h2>Phone Numbers</h2>
+
         {% if contact.phone_numbers.all %}
             {% for phone in contact.phone_numbers.all %}
                 <div class="phone-badge">
@@ -50,8 +76,8 @@
         {% else %}
             <p>No phone numbers added.</p>
         {% endif %}
+
         <a href="{% url 'add_phone' contact.id %}" class="btn">+ Add Phone</a>
     </div>
-    
 </body>
 </html>

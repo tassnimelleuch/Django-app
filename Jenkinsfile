@@ -347,18 +347,25 @@ fi
                         mkdir -p ~/.kube
                         mkdir -p ~/.minikube
                         
-                        # Copy configs if they exist in Jenkins home
+                        # Check if kubeconfig exists in Jenkins home
                         if [ -f /var/lib/jenkins/.kube/config ]; then
-                            cp /var/lib/jenkins/.kube/config ~/.kube/config
-                            echo "✅ Kubeconfig copied"
+                            # Only copy if the target is different
+                            if [ "/var/lib/jenkins/.kube/config" != "$HOME/.kube/config" ]; then
+                                cp /var/lib/jenkins/.kube/config ~/.kube/config
+                                echo "✅ Kubeconfig copied"
+                            else
+                                echo "✅ Kubeconfig already in correct location"
+                            fi
                         fi
                         
-                        if [ -d /var/lib/jenkins/.minikube ]; then
+                        # Copy minikube config if it exists
+                        if [ -d /var/lib/jenkins/.minikube ] && [ "/var/lib/jenkins/.minikube" != "$HOME/.minikube" ]; then
                             cp -r /var/lib/jenkins/.minikube/* ~/.minikube/ 2>/dev/null || true
                             echo "✅ Minikube config copied"
                         fi
                         
                         # Set minikube profile
+                        echo "Setting minikube profile..."
                         minikube profile minikube || true
                         
                         # Test connection
@@ -366,19 +373,23 @@ fi
                         if kubectl cluster-info --request-timeout=5s; then
                             echo "✅ Kubernetes cluster accessible"
                         else
-                            echo "⚠️ Cannot connect to cluster, but continuing..."
-                            # Don't fail the pipeline, just warn
+                            echo "⚠️ Cannot connect to cluster:"
+                            kubectl cluster-info --request-timeout=5s 2>&1 || true
                         fi
                         
                         # Check minikube status
+                        echo "Checking minikube status..."
                         minikube status || echo "⚠️ Minikube status check failed"
+                        
+                        # List current context
+                        echo "Current kubectl context:"
+                        kubectl config current-context || echo "No context set"
                         
                         echo "✅ Setup completed"
                     '''
                 }
             }
         }
-
         stage('Deploy to Minikube') {
             when {
                 expression { fileExists('k8s/deployment.yaml') }

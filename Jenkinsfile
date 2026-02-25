@@ -480,7 +480,7 @@ fi
                         POD_STATUS=$(kubectl get pod $POD_NAME -o jsonpath='{.status.phase}')
                         echo "📊 Pod status: $POD_STATUS"
                         
-                        if [ "$POD_STATUS" == "Running" ]; then
+                        if [ "$POD_STATUS" = "Running" ]; then
                             echo "✅ Pod is running"
                             
                             # Check initContainers logs

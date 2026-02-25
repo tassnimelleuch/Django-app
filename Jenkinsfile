@@ -337,55 +337,14 @@ fi
             steps {
                 script {
                     sh '''
-                        echo "🔧 Setting up Minikube access for Jenkins..."
-                        
-                        # Set up environment
                         export MINIKUBE_HOME=/var/lib/jenkins
                         export KUBECONFIG=/var/lib/jenkins/.kube/config
                         
-                        # Create directories if they don't exist
-                        mkdir -p ~/.kube
-                        mkdir -p ~/.minikube
+                        # Verify minikube is running
+                        minikube status || exit 1
+                        kubectl get nodes || exit 1
                         
-                        # Check if kubeconfig exists in Jenkins home
-                        if [ -f /var/lib/jenkins/.kube/config ]; then
-                            # Only copy if the target is different
-                            if [ "/var/lib/jenkins/.kube/config" != "$HOME/.kube/config" ]; then
-                                cp /var/lib/jenkins/.kube/config ~/.kube/config
-                                echo "✅ Kubeconfig copied"
-                            else
-                                echo "✅ Kubeconfig already in correct location"
-                            fi
-                        fi
-                        
-                        # Copy minikube config if it exists
-                        if [ -d /var/lib/jenkins/.minikube ] && [ "/var/lib/jenkins/.minikube" != "$HOME/.minikube" ]; then
-                            cp -r /var/lib/jenkins/.minikube/* ~/.minikube/ 2>/dev/null || true
-                            echo "✅ Minikube config copied"
-                        fi
-                        
-                        # Set minikube profile
-                        echo "Setting minikube profile..."
-                        minikube profile minikube || true
-                        
-                        # Test connection
-                        echo "Testing cluster connection..."
-                        if kubectl cluster-info --request-timeout=5s; then
-                            echo "✅ Kubernetes cluster accessible"
-                        else
-                            echo "⚠️ Cannot connect to cluster:"
-                            kubectl cluster-info --request-timeout=5s 2>&1 || true
-                        fi
-                        
-                        # Check minikube status
-                        echo "Checking minikube status..."
-                        minikube status || echo "⚠️ Minikube status check failed"
-                        
-                        # List current context
-                        echo "Current kubectl context:"
-                        kubectl config current-context || echo "No context set"
-                        
-                        echo "✅ Setup completed"
+                        echo "✅ Minikube ready!"
                     '''
                 }
             }

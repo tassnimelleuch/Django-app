@@ -3,7 +3,7 @@ pipeline {
     
     options {
         buildDiscarder(logRotator(numToKeepStr: '10'))
-        timeout(time: 15, unit: 'MINUTES')
+        timeout(time: 20, unit: 'MINUTES')  // Increased timeout for image pulls
     }
     
     environment {
@@ -40,6 +40,10 @@ pipeline {
         K8S_NAMESPACE = 'default'
         K8S_DEPLOYMENT = 'django-contact-app'
         K8S_SERVICE = 'django-contact-service'
+        
+        // Minikube environment for Jenkins
+        MINIKUBE_HOME = '/var/lib/jenkins'
+        KUBECONFIG = '/var/lib/jenkins/.kube/config'
     }
     
     stages {
@@ -168,7 +172,6 @@ except Exception as e:
                         echo "🔍 VERIFYING SonarCloud quality gate from GitHub..."
                         echo "🔗 SonarCloud Dashboard: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
                         
-                        // ✅ Triple single quotes: Groovy never interpolates $GITHUB_TOKEN
                         writeFile file: 'check-sonarcloud.sh', text: '''#!/bin/bash
 set -e
 
@@ -213,8 +216,6 @@ fi
                         
                         sh 'chmod +x check-sonarcloud.sh'
                         
-                        // Single-quoted sh call + withEnv for non-sensitive vars
-                        // GITHUB_TOKEN is injected by withCredentials automatically
                         withEnv([
                             "GITHUB_OWNER=${GITHUB_OWNER}",
                             "GITHUB_REPO=${GITHUB_REPO}",
@@ -340,15 +341,23 @@ fi
                         export MINIKUBE_HOME=/var/lib/jenkins
                         export KUBECONFIG=/var/lib/jenkins/.kube/config
                         
-                        # Verify minikube is running
-                        minikube status || exit 1
-                        kubectl get nodes || exit 1
+                        echo "🔧 Verifying Minikube access..."
+                        minikube status || {
+                            echo "❌ Minikube not running"
+                            exit 1
+                        }
+                        
+                        kubectl get nodes || {
+                            echo "❌ Cannot access cluster"
+                            exit 1
+                        }
                         
                         echo "✅ Minikube ready!"
                     '''
                 }
             }
         }
+        
         stage('Deploy to Minikube') {
             when {
                 expression { fileExists('k8s/deployment.yaml') }
@@ -359,14 +368,14 @@ fi
                 script {
                     echo "🚀 Deploying to Minikube..."
                     
-                    // Update the image in deployment.yaml with new tag
                     sh """
                         sed -i 's|image: .*django-contact-app:.*|image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}|g' k8s/deployment.yaml
                         echo "✅ Updated deployment with new image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
                     """
                     
-                    // Apply Kubernetes manifests with retry logic
                     sh '''
+                        export KUBECONFIG=/var/lib/jenkins/.kube/config
+                        
                         # Function to apply with retry
                         apply_with_retry() {
                             local file=$1
@@ -393,10 +402,6 @@ fi
                             return 1
                         }
                         
-                        # Export environment for kubectl
-                        export KUBECONFIG=~/.kube/config
-                        
-                        # Apply all resources
                         echo "Applying Kubernetes resources..."
                         apply_with_retry "k8s/pvc.yaml" "PVC" || exit 1
                         apply_with_retry "k8s/deployment.yaml" "Deployment" || exit 1
@@ -413,23 +418,34 @@ fi
         stage('Wait for Rollout') {
             steps {
                 script {
-                    echo "⏳ Waiting for deployment to be ready..."
+                    echo "⏳ Waiting for deployment to be ready (this may take 3-5 minutes for first pull)..."
                     
                     sh '''
-                        export KUBECONFIG=~/.kube/config
+                        export KUBECONFIG=/var/lib/jenkins/.kube/config
+                        
+                        # Show pod status during wait
+                        kubectl get pods -w &
+                        WATCH_PID=$!
                         
                         echo "Waiting for rollout to complete..."
-                        if kubectl rollout status deployment/django-contact-app --timeout=120s; then
+                        if kubectl rollout status deployment/django-contact-app --timeout=300s; then
+                            kill $WATCH_PID 2>/dev/null || true
                             echo "✅ Deployment rollout successful"
                         else
+                            kill $WATCH_PID 2>/dev/null || true
                             echo "❌ Deployment rollout failed"
                             echo "📋 Debug information:"
-                            kubectl describe pod -l app=django-contact-app
-                            kubectl logs -l app=django-contact-app --tail=50
+                            POD_NAME=$(kubectl get pods -l app=django-contact-app -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+                            if [ -n "$POD_NAME" ]; then
+                                echo "Pod events:"
+                                kubectl describe pod $POD_NAME | grep -A 20 Events
+                                echo "Init container logs:"
+                                kubectl logs $POD_NAME -c fix-permissions 2>/dev/null || true
+                                kubectl logs $POD_NAME -c migrate 2>/dev/null || true
+                            fi
                             exit 1
                         fi
                         
-                        # Get pod status
                         echo "📊 Current pods:"
                         kubectl get pods -l app=django-contact-app
                         
@@ -446,11 +462,19 @@ fi
                     echo "🔍 Verifying deployment..."
                     
                     sh '''
-                        export KUBECONFIG=~/.kube/config
+                        export KUBECONFIG=/var/lib/jenkins/.kube/config
                         
                         # Get pod name
                         POD_NAME=$(kubectl get pods -l app=django-contact-app -o jsonpath='{.items[0].metadata.name}')
                         echo "📦 Pod: $POD_NAME"
+                        
+                        # Wait for pod to be fully ready
+                        echo "Waiting for pod to be ready..."
+                        kubectl wait --for=condition=ready pod/$POD_NAME --timeout=60s || {
+                            echo "❌ Pod not ready"
+                            kubectl describe pod $POD_NAME
+                            exit 1
+                        }
                         
                         # Check pod status
                         POD_STATUS=$(kubectl get pod $POD_NAME -o jsonpath='{.status.phase}')
@@ -476,19 +500,16 @@ fi
                         
                         # Get service URL using minikube
                         echo "🌐 Getting service URL..."
-                        if command -v minikube &> /dev/null; then
-                            MINIKUBE_URL=$(minikube service django-contact-service --url 2>/dev/null || echo "")
-                            if [ -n "$MINIKUBE_URL" ]; then
-                                echo "✅ Application is accessible at: $MINIKUBE_URL"
-                                
-                                # Test the endpoint
-                                echo "Testing application endpoint..."
-                                curl -f -s -o /dev/null -w "HTTP Status: %{http_code}\n" $MINIKUBE_URL || echo "⚠️ App not responding yet"
-                            else
-                                echo "⚠️ Could not get Minikube URL"
-                            fi
+                        MINIKUBE_URL=$(minikube service django-contact-service --url 2>/dev/null || echo "")
+                        if [ -n "$MINIKUBE_URL" ]; then
+                            echo "✅ Application is accessible at: $MINIKUBE_URL"
+                            
+                            # Test the endpoint
+                            echo "Testing application endpoint..."
+                            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" $MINIKUBE_URL || echo "Failed")
+                            echo "HTTP Status: $HTTP_CODE"
                         else
-                            echo "⚠️ Minikube command not found"
+                            echo "⚠️ Could not get Minikube URL"
                         fi
                     '''
                 }
@@ -504,7 +525,7 @@ fi
                     echo "⚠️ Deployment failed! Rolling back to previous version..."
                     
                     sh '''
-                        export KUBECONFIG=~/.kube/config
+                        export KUBECONFIG=/var/lib/jenkins/.kube/config
                         
                         echo "Undoing deployment..."
                         kubectl rollout undo deployment/django-contact-app
@@ -518,7 +539,9 @@ fi
                     echo "✅ Rollback finished"
                 }
             }
-        }}
+        }
+    }
+    
     post {
         always {
             archiveArtifacts artifacts: 'coverage.xml, junit-results.xml, pylint-report.json, sonar-check.json', allowEmptyArchive: true
@@ -539,7 +562,6 @@ fi
             echo "📊 View on SonarCloud: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
             
             script {
-                // Get service URL on success
                 def SERVICE_URL = sh(
                     script: "minikube service ${K8S_SERVICE} --url || echo 'Service not available'",
                     returnStdout: true

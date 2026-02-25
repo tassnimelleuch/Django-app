@@ -36,13 +36,15 @@ pipeline {
         GITHUB_REPO = 'Django-app'
         GITHUB_OWNER = 'tassnimelleuch'
         SONAR_PROJECT_KEY = 'tassnimelleuch_Django-app'
+        
+        K8S_NAMESPACE = 'default'
+        K8S_DEPLOYMENT = 'django-contact-app'
+        K8S_SERVICE = 'django-contact-service'
     }
     
     stages {
         stage('Clean Workspace') {
             steps {
-                // Only delete generated files/folders, NOT the git repo
-                // This avoids a full re-clone which fails when GitHub is unreachable
                 sh '''
                     rm -rf venv || true
                     rm -f coverage.xml junit-results.xml pylint-report.json sonar-check.json || true
@@ -328,6 +330,129 @@ fi
                 }
             }
         }
+        
+        // ============= NEW MINIKUBE DEPLOYMENT STAGES =============
+        
+        stage('Deploy to Minikube') {
+            when {
+                expression { fileExists('k8s/deployment.yaml') }
+                expression { fileExists('k8s/service.yaml') }
+                expression { fileExists('k8s/pvc.yaml') }
+            }
+            steps {
+                script {
+                    echo "🚀 Deploying to Minikube..."
+                    
+                    // Update the image in deployment.yaml with new tag
+                    sh """
+                        sed -i 's|image: .*django-contact-app:.*|image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}|g' k8s/deployment.yaml
+                        echo "✅ Updated deployment with new image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
+                    """
+                    
+                    // Apply Kubernetes manifests
+                    sh """
+                        echo "Applying PVC..."
+                        kubectl apply -f k8s/pvc.yaml
+                        
+                        echo "Applying Deployment..."
+                        kubectl apply -f k8s/deployment.yaml
+                        
+                        echo "Applying Service..."
+                        kubectl apply -f k8s/service.yaml
+                    """
+                    
+                    echo "✅ Kubernetes resources applied"
+                }
+            }
+        }
+        
+        stage('Wait for Rollout') {
+            steps {
+                script {
+                    echo "⏳ Waiting for deployment to be ready..."
+                    
+                    sh """
+                        kubectl rollout status deployment/${K8S_DEPLOYMENT} --timeout=120s
+                    """
+                    
+                    // Get pod status
+                    sh """
+                        echo "📊 Current pods:"
+                        kubectl get pods -l app=django-contact-app
+                        
+                        echo "📊 Current services:"
+                        kubectl get services
+                    """
+                }
+            }
+        }
+        
+        stage('Verify Deployment') {
+            steps {
+                script {
+                    echo "🔍 Verifying deployment..."
+                    
+                    // Get the pod name
+                    def POD_NAME = sh(
+                        script: "kubectl get pods -l app=django-contact-app -o jsonpath='{.items[0].metadata.name}'",
+                        returnStdout: true
+                    ).trim()
+                    
+                    // Check if pod is running
+                    def POD_STATUS = sh(
+                        script: "kubectl get pod ${POD_NAME} -o jsonpath='{.status.phase}'",
+                        returnStdout: true
+                    ).trim()
+                    
+                    if (POD_STATUS == "Running") {
+                        echo "✅ Pod is running: ${POD_NAME}"
+                        
+                        // Check initContainers logs
+                        sh """
+                            echo "📋 fix-permissions logs:"
+                            kubectl logs ${POD_NAME} -c fix-permissions || true
+                            
+                            echo "📋 migrate logs:"
+                            kubectl logs ${POD_NAME} -c migrate || true
+                        """
+                    } else {
+                        error "Pod is not running! Status: ${POD_STATUS}"
+                    }
+                    
+                    // Get service URL
+                    def SERVICE_URL = sh(
+                        script: "minikube service ${K8S_SERVICE} --url",
+                        returnStdout: true
+                    ).trim()
+                    
+                    echo "✅ Application is accessible at: ${SERVICE_URL}"
+                    
+                    // Test the endpoint
+                    sh """
+                        echo "Testing application endpoint..."
+                        curl -f ${SERVICE_URL} || echo "⚠️ App not responding yet (might need more time)"
+                    """
+                }
+            }
+        }
+        
+        stage('Rollback on Failure') {
+            when {
+                expression { currentBuild.result == 'FAILURE' }
+            }
+            steps {
+                script {
+                    echo "⚠️ Deployment failed! Rolling back to previous version..."
+                    
+                    sh """
+                        kubectl rollout undo deployment/${K8S_DEPLOYMENT}
+                        kubectl rollout status deployment/${K8S_DEPLOYMENT} --timeout=60s
+                    """
+                    
+                    echo "✅ Rollback completed"
+                }
+            }
+        }
     }
     
     post {
@@ -348,6 +473,15 @@ fi
             echo "🐳 Docker image: ${env.DOCKER_IMAGE_NAME}:${env.DOCKER_IMAGE_TAG}"
             echo "📦 View on Docker Hub: https://hub.docker.com/r/${env.DOCKER_IMAGE_NAME}/tags"
             echo "📊 View on SonarCloud: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
+            
+            script {
+                // Get service URL on success
+                def SERVICE_URL = sh(
+                    script: "minikube service ${K8S_SERVICE} --url || echo 'Service not available'",
+                    returnStdout: true
+                ).trim()
+                echo "🌐 Access your app at: ${SERVICE_URL}"
+            }
         }
         
         failure {

@@ -3,7 +3,7 @@ pipeline {
     
     options {
         buildDiscarder(logRotator(numToKeepStr: '10'))
-        timeout(time: 10, unit: 'MINUTES')
+        timeout(time: 15, unit: 'MINUTES')
     }
     
     environment {
@@ -331,8 +331,54 @@ fi
             }
         }
         
-        // ============= NEW MINIKUBE DEPLOYMENT STAGES =============
-        
+        // ============= FIXED MINIKUBE CD STAGES =============
+
+        stage('Setup Minikube Access') {
+            steps {
+                script {
+                    sh '''
+                        echo "🔧 Setting up Minikube access for Jenkins..."
+                        
+                        # Set up environment
+                        export MINIKUBE_HOME=/var/lib/jenkins
+                        export KUBECONFIG=/var/lib/jenkins/.kube/config
+                        
+                        # Create directories if they don't exist
+                        mkdir -p ~/.kube
+                        mkdir -p ~/.minikube
+                        
+                        # Copy configs if they exist in Jenkins home
+                        if [ -f /var/lib/jenkins/.kube/config ]; then
+                            cp /var/lib/jenkins/.kube/config ~/.kube/config
+                            echo "✅ Kubeconfig copied"
+                        fi
+                        
+                        if [ -d /var/lib/jenkins/.minikube ]; then
+                            cp -r /var/lib/jenkins/.minikube/* ~/.minikube/ 2>/dev/null || true
+                            echo "✅ Minikube config copied"
+                        fi
+                        
+                        # Set minikube profile
+                        minikube profile minikube || true
+                        
+                        # Test connection
+                        echo "Testing cluster connection..."
+                        if kubectl cluster-info --request-timeout=5s; then
+                            echo "✅ Kubernetes cluster accessible"
+                        else
+                            echo "⚠️ Cannot connect to cluster, but continuing..."
+                            # Don't fail the pipeline, just warn
+                        fi
+                        
+                        # Check minikube status
+                        minikube status || echo "⚠️ Minikube status check failed"
+                        
+                        echo "✅ Setup completed"
+                    '''
+                }
+            }
+        }
+
         stage('Deploy to Minikube') {
             when {
                 expression { fileExists('k8s/deployment.yaml') }
@@ -349,93 +395,136 @@ fi
                         echo "✅ Updated deployment with new image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
                     """
                     
-                    // Apply Kubernetes manifests
-                    sh """
-                        echo "Applying PVC..."
-                        kubectl apply -f k8s/pvc.yaml
+                    // Apply Kubernetes manifests with retry logic
+                    sh '''
+                        # Function to apply with retry
+                        apply_with_retry() {
+                            local file=$1
+                            local name=$2
+                            local max_retries=3
+                            local retry=0
+                            
+                            echo "📄 Applying $name from $file..."
+                            
+                            while [ $retry -lt $max_retries ]; do
+                                if kubectl apply -f $file; then
+                                    echo "✅ $name applied successfully"
+                                    return 0
+                                else
+                                    retry=$((retry+1))
+                                    if [ $retry -lt $max_retries ]; then
+                                        echo "⚠️ Attempt $retry failed, retrying in 5 seconds..."
+                                        sleep 5
+                                    fi
+                                fi
+                            done
+                            
+                            echo "❌ Failed to apply $name after $max_retries attempts"
+                            return 1
+                        }
                         
-                        echo "Applying Deployment..."
-                        kubectl apply -f k8s/deployment.yaml
+                        # Export environment for kubectl
+                        export KUBECONFIG=~/.kube/config
                         
-                        echo "Applying Service..."
-                        kubectl apply -f k8s/service.yaml
-                    """
+                        # Apply all resources
+                        echo "Applying Kubernetes resources..."
+                        apply_with_retry "k8s/pvc.yaml" "PVC" || exit 1
+                        apply_with_retry "k8s/deployment.yaml" "Deployment" || exit 1
+                        apply_with_retry "k8s/service.yaml" "Service" || exit 1
+                        
+                        echo "✅ All Kubernetes resources applied successfully"
+                    '''
                     
-                    echo "✅ Kubernetes resources applied"
+                    echo "✅ Deployment stage completed"
                 }
             }
         }
-        
+
         stage('Wait for Rollout') {
             steps {
                 script {
                     echo "⏳ Waiting for deployment to be ready..."
                     
-                    sh """
-                        kubectl rollout status deployment/${K8S_DEPLOYMENT} --timeout=120s
-                    """
-                    
-                    // Get pod status
-                    sh """
+                    sh '''
+                        export KUBECONFIG=~/.kube/config
+                        
+                        echo "Waiting for rollout to complete..."
+                        if kubectl rollout status deployment/django-contact-app --timeout=120s; then
+                            echo "✅ Deployment rollout successful"
+                        else
+                            echo "❌ Deployment rollout failed"
+                            echo "📋 Debug information:"
+                            kubectl describe pod -l app=django-contact-app
+                            kubectl logs -l app=django-contact-app --tail=50
+                            exit 1
+                        fi
+                        
+                        # Get pod status
                         echo "📊 Current pods:"
                         kubectl get pods -l app=django-contact-app
                         
                         echo "📊 Current services:"
                         kubectl get services
-                    """
+                    '''
                 }
             }
         }
-        
+
         stage('Verify Deployment') {
             steps {
                 script {
                     echo "🔍 Verifying deployment..."
                     
-                    // Get the pod name
-                    def POD_NAME = sh(
-                        script: "kubectl get pods -l app=django-contact-app -o jsonpath='{.items[0].metadata.name}'",
-                        returnStdout: true
-                    ).trim()
-                    
-                    // Check if pod is running
-                    def POD_STATUS = sh(
-                        script: "kubectl get pod ${POD_NAME} -o jsonpath='{.status.phase}'",
-                        returnStdout: true
-                    ).trim()
-                    
-                    if (POD_STATUS == "Running") {
-                        echo "✅ Pod is running: ${POD_NAME}"
+                    sh '''
+                        export KUBECONFIG=~/.kube/config
                         
-                        // Check initContainers logs
-                        sh """
+                        # Get pod name
+                        POD_NAME=$(kubectl get pods -l app=django-contact-app -o jsonpath='{.items[0].metadata.name}')
+                        echo "📦 Pod: $POD_NAME"
+                        
+                        # Check pod status
+                        POD_STATUS=$(kubectl get pod $POD_NAME -o jsonpath='{.status.phase}')
+                        echo "📊 Pod status: $POD_STATUS"
+                        
+                        if [ "$POD_STATUS" == "Running" ]; then
+                            echo "✅ Pod is running"
+                            
+                            # Check initContainers logs
                             echo "📋 fix-permissions logs:"
-                            kubectl logs ${POD_NAME} -c fix-permissions || true
+                            kubectl logs $POD_NAME -c fix-permissions 2>/dev/null || echo "No fix-permissions logs"
                             
                             echo "📋 migrate logs:"
-                            kubectl logs ${POD_NAME} -c migrate || true
-                        """
-                    } else {
-                        error "Pod is not running! Status: ${POD_STATUS}"
-                    }
-                    
-                    // Get service URL
-                    def SERVICE_URL = sh(
-                        script: "minikube service ${K8S_SERVICE} --url",
-                        returnStdout: true
-                    ).trim()
-                    
-                    echo "✅ Application is accessible at: ${SERVICE_URL}"
-                    
-                    // Test the endpoint
-                    sh """
-                        echo "Testing application endpoint..."
-                        curl -f ${SERVICE_URL} || echo "⚠️ App not responding yet (might need more time)"
-                    """
+                            kubectl logs $POD_NAME -c migrate 2>/dev/null || echo "No migrate logs"
+                            
+                            echo "📋 Main container logs:"
+                            kubectl logs $POD_NAME --tail=20 2>/dev/null || echo "No main container logs"
+                        else
+                            echo "❌ Pod is not running! Status: $POD_STATUS"
+                            kubectl describe pod $POD_NAME
+                            exit 1
+                        fi
+                        
+                        # Get service URL using minikube
+                        echo "🌐 Getting service URL..."
+                        if command -v minikube &> /dev/null; then
+                            MINIKUBE_URL=$(minikube service django-contact-service --url 2>/dev/null || echo "")
+                            if [ -n "$MINIKUBE_URL" ]; then
+                                echo "✅ Application is accessible at: $MINIKUBE_URL"
+                                
+                                # Test the endpoint
+                                echo "Testing application endpoint..."
+                                curl -f -s -o /dev/null -w "HTTP Status: %{http_code}\n" $MINIKUBE_URL || echo "⚠️ App not responding yet"
+                            else
+                                echo "⚠️ Could not get Minikube URL"
+                            fi
+                        else
+                            echo "⚠️ Minikube command not found"
+                        fi
+                    '''
                 }
             }
         }
-        
+
         stage('Rollback on Failure') {
             when {
                 expression { currentBuild.result == 'FAILURE' }
@@ -444,17 +533,22 @@ fi
                 script {
                     echo "⚠️ Deployment failed! Rolling back to previous version..."
                     
-                    sh """
-                        kubectl rollout undo deployment/${K8S_DEPLOYMENT}
-                        kubectl rollout status deployment/${K8S_DEPLOYMENT} --timeout=60s
-                    """
+                    sh '''
+                        export KUBECONFIG=~/.kube/config
+                        
+                        echo "Undoing deployment..."
+                        kubectl rollout undo deployment/django-contact-app
+                        
+                        echo "Waiting for rollback..."
+                        kubectl rollout status deployment/django-contact-app --timeout=60s
+                        
+                        echo "✅ Rollback completed"
+                    '''
                     
-                    echo "✅ Rollback completed"
+                    echo "✅ Rollback finished"
                 }
             }
         }
-    }
-    
     post {
         always {
             archiveArtifacts artifacts: 'coverage.xml, junit-results.xml, pylint-report.json, sonar-check.json', allowEmptyArchive: true

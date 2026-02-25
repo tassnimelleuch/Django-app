@@ -12,6 +12,8 @@ spec:
       labels:
         app: django-contact-app
     spec:
+      automountServiceAccountToken: false  # FIX 1: Disable token auto-mount
+      
       initContainers:
         - name: fix-permissions
           image: busybox:latest
@@ -45,6 +47,13 @@ spec:
             - name: django-db
               mountPath: /app/db.sqlite3
               subPath: db.sqlite3
+          resources:  # FIX 2 & 3: Add resource limits for initContainer
+            limits:
+              memory: "256Mi"
+              ephemeral-storage: "500Mi"
+            requests:
+              memory: "128Mi"
+              ephemeral-storage: "200Mi"
 
       containers:
         - name: django-contact-app
@@ -70,6 +79,13 @@ spec:
             - name: django-db
               mountPath: /app/db.sqlite3
               subPath: db.sqlite3
+          resources:  # FIX 2 & 3: Add resource limits for main container
+            limits:
+              memory: "512Mi"
+              ephemeral-storage: "1Gi"
+            requests:
+              memory: "256Mi"
+              ephemeral-storage: "500Mi"
 
       volumes:
         - name: django-db

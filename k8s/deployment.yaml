@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: django-contact-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: django-contact-app
+  template:
+    metadata:
+      labels:
+        app: django-contact-app
+    spec:
+      initContainers:
+        - name: fix-permissions
+          image: busybox:latest
+          command: ['sh', '-c']
+          args:
+            - |
+              echo "Creating empty database file..."
+              touch /data/db.sqlite3
+              chmod 666 /data/db.sqlite3
+              echo "Done!"
+          volumeMounts:
+            - name: django-db
+              mountPath: /data
+
+        - name: migrate
+          image: tasnimelleuchenis/django-contact-app:latest
+          command: ["sh", "-c"]
+          args:
+            - |
+              echo "Running migrations..."
+              python manage.py migrate --noinput
+              echo "Migrations completed!"
+          env:
+            - name: DEBUG
+              value: "True"
+            - name: ALLOWED_HOSTS
+              value: "localhost,127.0.0.1,172.17.0.2"
+            - name: SECRET_KEY
+              value: "dev-secret-key-change-me"
+          volumeMounts:
+            - name: django-db
+              mountPath: /app/db.sqlite3
+              subPath: db.sqlite3
+
+      containers:
+        - name: django-contact-app
+          image: tasnimelleuchenis/django-contact-app:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - name: DEBUG
+              value: "True"
+            - name: ALLOWED_HOSTS
+              value: "localhost,127.0.0.1,172.17.0.2"
+            - name: SECRET_KEY
+              value: "dev-secret-key-change-me"
+          command: ["sh", "-c"]
+          args:
+            - |
+              echo "Starting Gunicorn..."
+              exec gunicorn myproject.wsgi:application \
+                --bind 0.0.0.0:8000 \
+                --workers 1 \
+                --timeout 120
+          volumeMounts:
+            - name: django-db
+              mountPath: /app/db.sqlite3
+              subPath: db.sqlite3
+
+      volumes:
+        - name: django-db
+          persistentVolumeClaim:
+            claimName: django-db-pvc

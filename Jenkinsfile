@@ -332,7 +332,7 @@ fi
             }
         }
         
-        // ============= FIXED MINIKUBE CD STAGES =============
+        // ============= CD STAGES =============
 
         stage('Setup Minikube Access') {
             steps {

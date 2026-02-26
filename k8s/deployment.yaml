@@ -95,3 +95,4 @@ spec:
         - name: django-db
           persistentVolumeClaim:
             claimName: django-db-pvc
+#test

@@ -21,7 +21,6 @@ spec:
           args:
             - |
               echo "Creating empty database file..."
-              mkdir -p /data
               touch /data/db.sqlite3
               chmod 666 /data/db.sqlite3
               echo "Done!"
@@ -35,11 +34,7 @@ spec:
           args:
             - |
               echo "Running migrations..."
-              # Copy the database file from the data volume to where Django expects it
-              cp /data/db.sqlite3 /app/db.sqlite3 || true
               python manage.py migrate --noinput
-              # Copy back after migration
-              cp /app/db.sqlite3 /data/db.sqlite3 || true
               echo "Migrations completed!"
           env:
             - name: DEBUG
@@ -50,10 +45,9 @@ spec:
               value: "dev-secret-key-change-me"
           volumeMounts:
             - name: django-db
-              mountPath: /data
-            - name: django-app-tmp
-              mountPath: /app
-          resources:  
+              mountPath: /app/db.sqlite3
+              subPath: db.sqlite3
+          resources:  # FIX 2 & 3: Add resource limits for initContainer
             limits:
               memory: "256Mi"
               ephemeral-storage: "500Mi"
@@ -68,7 +62,7 @@ spec:
             - containerPort: 8000
           env:
             - name: DEBUG
-              value: "False"
+              value: "Flase"
             - name: ALLOWED_HOSTS
               value: "localhost,127.0.0.1,172.17.0.2"
             - name: SECRET_KEY
@@ -77,17 +71,14 @@ spec:
           args:
             - |
               echo "Starting Gunicorn..."
-              # Copy database from persistent volume to where Django expects it
-              cp /data/db.sqlite3 /app/db.sqlite3 2>/dev/null || echo "No existing DB"
               exec gunicorn myproject.wsgi:application \
                 --bind 0.0.0.0:8000 \
                 --workers 1 \
                 --timeout 120
           volumeMounts:
             - name: django-db
-              mountPath: /data
-            - name: django-app-tmp
-              mountPath: /app
+              mountPath: /app/db.sqlite3
+              subPath: db.sqlite3
           resources:  
             limits:
               memory: "512Mi"
@@ -100,5 +91,4 @@ spec:
         - name: django-db
           persistentVolumeClaim:
             claimName: django-db-pvc
-        - name: django-app-tmp
-          emptyDir: {}
+#testing this version 

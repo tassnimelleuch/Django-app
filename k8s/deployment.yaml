@@ -65,7 +65,7 @@ spec:
             - containerPort: 8000
           env:
             - name: DEBUG
-              value: "False"  # Fixed typo here
+              value: "False"  
             - name: ALLOWED_HOSTS
               value: "localhost,127.0.0.1,172.17.0.2"
             - name: SECRET_KEY

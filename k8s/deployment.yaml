@@ -12,40 +12,51 @@ spec:
       labels:
         app: django-contact-app
     spec:
-      automountServiceAccountToken: false
+      automountServiceAccountToken: false  
       
       initContainers:
-        - name: django-setup
+        - name: fix-permissions
+          image: busybox:latest
+          command: ['sh', '-c']
+          args:
+            - |
+              echo "Creating database directory..."
+              mkdir -p /data
+              echo "Creating empty database file..."
+              touch /data/db.sqlite3
+              chmod 666 /data/db.sqlite3
+              echo "Done!"
+          volumeMounts:
+            - name: django-db
+              mountPath: /data
+
+        - name: migrate
           image: tasnimelleuchenis/django-contact-app:latest
           command: ["sh", "-c"]
           args:
             - |
+              echo "Running migrations..."
+              # Ensure the database file exists and is writable
               touch /app/db.sqlite3
-              chmod 666 /app/db.sqlite3
               python manage.py migrate --noinput
+              echo "Migrations completed!"
           env:
-            - name: SECRET_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: django-secrets
-                  key: secret-key
             - name: DEBUG
               value: "False"
             - name: ALLOWED_HOSTS
-              value: "localhost,127.0.0.1"
+              value: "localhost,127.0.0.1,172.17.0.2"
+            - name: SECRET_KEY
+              value: "dev-secret-key-change-me"
           volumeMounts:
             - name: django-db
-              mountPath: /app/db.sqlite3
-              subPath: db.sqlite3
-          resources:
+              mountPath: /app
+          resources:  
             limits:
-              memory: "128Mi"
-              cpu: "100m"
-              ephemeral-storage: "500Mi" 
+              memory: "256Mi"
+              ephemeral-storage: "500Mi"
             requests:
-              memory: "64Mi"
-              cpu: "50m"
-              ephemeral-storage: "200Mi" 
+              memory: "128Mi"
+              ephemeral-storage: "200Mi"
 
       containers:
         - name: django-contact-app
@@ -53,47 +64,32 @@ spec:
           ports:
             - containerPort: 8000
           env:
-            - name: SECRET_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: django-secrets
-                  key: secret-key
             - name: DEBUG
               value: "False"
             - name: ALLOWED_HOSTS
-              value: "localhost,127.0.0.1"
+              value: "localhost,127.0.0.1,172.17.0.2"
+            - name: SECRET_KEY
+              value: "dev-secret-key-change-me"
           command: ["sh", "-c"]
           args:
             - |
+              echo "Starting Gunicorn..."
+              # Ensure database exists
+              touch /app/db.sqlite3
               exec gunicorn myproject.wsgi:application \
                 --bind 0.0.0.0:8000 \
                 --workers 1 \
-                --threads 2
+                --timeout 120
           volumeMounts:
             - name: django-db
-              mountPath: /app/db.sqlite3
-              subPath: db.sqlite3
-          livenessProbe:
-            httpGet:
-              path: /health/
-              port: 8000
-            initialDelaySeconds: 30
-            periodSeconds: 30
-          readinessProbe:
-            httpGet:
-              path: /health/
-              port: 8000
-            initialDelaySeconds: 15
-            periodSeconds: 10
-          resources:
+              mountPath: /app
+          resources:  
             limits:
-              memory: "256Mi"
-              cpu: "200m"
-              ephemeral-storage: "1Gi"  
+              memory: "512Mi"
+              ephemeral-storage: "1Gi"
             requests:
-              memory: "128Mi"
-              cpu: "100m"
-              ephemeral-storage: "500Mi"  
+              memory: "256Mi"
+              ephemeral-storage: "500Mi"
 
       volumes:
         - name: django-db

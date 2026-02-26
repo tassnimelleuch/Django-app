@@ -332,7 +332,7 @@ fi
             }
         }
         
-        // ============= CD STAGES =============
+        // ============= FIXED MINIKUBE CD STAGES =============
 
         stage('Setup Minikube Access') {
             steps {
@@ -362,7 +362,6 @@ fi
             when {
                 expression { fileExists('k8s/deployment.yaml') }
                 expression { fileExists('k8s/service.yaml') }
-                expression { fileExists('k8s/pvc.yaml') }
             }
             steps {
                 script {
@@ -403,7 +402,26 @@ fi
                         }
                         
                         echo "Applying Kubernetes resources..."
-                        apply_with_retry "k8s/pvc.yaml" "PVC" || exit 1
+                        
+                        # Check if PVC exists, if not create it
+                        if ! kubectl get pvc django-db-pvc &>/dev/null; then
+                            echo "PVC doesn't exist, creating it..."
+                            cat <<EOF | kubectl apply -f -
+        apiVersion: v1
+        kind: PersistentVolumeClaim
+        metadata:
+        name: django-db-pvc
+        spec:
+        accessModes:
+            - ReadWriteOnce
+        resources:
+            requests:
+            storage: 1Gi
+        EOF
+                        else
+                            echo "PVC already exists"
+                        fi
+                        
                         apply_with_retry "k8s/deployment.yaml" "Deployment" || exit 1
                         apply_with_retry "k8s/service.yaml" "Service" || exit 1
                         
@@ -413,8 +431,7 @@ fi
                     echo "✅ Deployment stage completed"
                 }
             }
-        }
-
+        }        
         stage('Wait for Rollout') {
             steps {
                 script {

@@ -20,9 +20,8 @@ spec:
           command: ['sh', '-c']
           args:
             - |
-              echo "Creating database directory..."
-              mkdir -p /data
               echo "Creating empty database file..."
+              mkdir -p /data
               touch /data/db.sqlite3
               chmod 666 /data/db.sqlite3
               echo "Done!"
@@ -36,9 +35,11 @@ spec:
           args:
             - |
               echo "Running migrations..."
-              # Ensure the database file exists and is writable
-              touch /app/db.sqlite3
+              # Copy the database file from the data volume to where Django expects it
+              cp /data/db.sqlite3 /app/db.sqlite3 || true
               python manage.py migrate --noinput
+              # Copy back after migration
+              cp /app/db.sqlite3 /data/db.sqlite3 || true
               echo "Migrations completed!"
           env:
             - name: DEBUG
@@ -49,6 +50,8 @@ spec:
               value: "dev-secret-key-change-me"
           volumeMounts:
             - name: django-db
+              mountPath: /data
+            - name: django-app-tmp
               mountPath: /app
           resources:  
             limits:
@@ -74,14 +77,16 @@ spec:
           args:
             - |
               echo "Starting Gunicorn..."
-              # Ensure database exists
-              touch /app/db.sqlite3
+              # Copy database from persistent volume to where Django expects it
+              cp /data/db.sqlite3 /app/db.sqlite3 2>/dev/null || echo "No existing DB"
               exec gunicorn myproject.wsgi:application \
                 --bind 0.0.0.0:8000 \
                 --workers 1 \
                 --timeout 120
           volumeMounts:
             - name: django-db
+              mountPath: /data
+            - name: django-app-tmp
               mountPath: /app
           resources:  
             limits:
@@ -95,3 +100,5 @@ spec:
         - name: django-db
           persistentVolumeClaim:
             claimName: django-db-pvc
+        - name: django-app-tmp
+          emptyDir: {}

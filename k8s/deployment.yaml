@@ -42,12 +42,15 @@ spec:
             - name: ALLOWED_HOSTS
               value: "localhost,127.0.0.1,172.17.0.2"
             - name: SECRET_KEY
-              value: "dev-secret-key-change-me"
+              valueFrom:
+                secretKeyRef:
+                  name: django-secrets
+                  key: secret-key
           volumeMounts:
             - name: django-db
               mountPath: /app/db.sqlite3
               subPath: db.sqlite3
-          resources:  # FIX 2 & 3: Add resource limits for initContainer
+          resources:
             limits:
               memory: "256Mi"
               ephemeral-storage: "500Mi"
@@ -62,11 +65,14 @@ spec:
             - containerPort: 8000
           env:
             - name: DEBUG
-              value: "Flase"
+              value: "False"  # Fixed typo here
             - name: ALLOWED_HOSTS
               value: "localhost,127.0.0.1,172.17.0.2"
             - name: SECRET_KEY
-              value: "dev-secret-key-change-me"
+              valueFrom:
+                secretKeyRef:
+                  name: django-secrets
+                  key: secret-key
           command: ["sh", "-c"]
           args:
             - |
@@ -91,4 +97,3 @@ spec:
         - name: django-db
           persistentVolumeClaim:
             claimName: django-db-pvc
-#testing this version 

@@ -41,9 +41,11 @@ spec:
             limits:
               memory: "128Mi"
               cpu: "100m"
+              ephemeral-storage: "500Mi" 
             requests:
               memory: "64Mi"
               cpu: "50m"
+              ephemeral-storage: "200Mi" 
 
       containers:
         - name: django-contact-app
@@ -87,12 +89,13 @@ spec:
             limits:
               memory: "256Mi"
               cpu: "200m"
+              ephemeral-storage: "1Gi"  
             requests:
               memory: "128Mi"
               cpu: "100m"
+              ephemeral-storage: "500Mi"  
 
       volumes:
         - name: django-db
           persistentVolumeClaim:
             claimName: django-db-pvc
-#test

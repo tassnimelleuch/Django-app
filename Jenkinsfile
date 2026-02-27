@@ -787,7 +787,7 @@ fi
                 }
             }
         }
-            
+    } 
     post {
         always {
             archiveArtifacts artifacts: 'coverage.xml, junit-results.xml, pylint-report.json, sonar-check.json', allowEmptyArchive: true

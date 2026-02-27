@@ -841,7 +841,6 @@ fi
                 echo "🌐 Access your app at: ${SERVICE_URL}"
             }
             */
-        }
         
         failure {
             echo "❌❌❌ PIPELINE FAILED ❌❌❌"

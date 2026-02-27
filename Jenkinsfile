@@ -554,23 +554,11 @@ fi
         stage('Setup AKS Access') {
             steps {
                 script {
-                    echo "🔧 Setting up AKS access..."
-                    withCredentials([azureServicePrincipal(
-                        credentialsId: 'azure-service-principal',
-                        subscriptionIdVariable: 'AZURE_SUBSCRIPTION_ID',
-                        clientIdVariable: 'AZURE_CLIENT_ID',
-                        clientSecretVariable: 'AZURE_CLIENT_SECRET',
-                        tenantIdVariable: 'AZURE_TENANT_ID'
-                    )]) {
-                        sh '''
-                            # Login to Azure using the kubeconfig we already set up
-                            # Since we manually configured kubectl, we can just use it directly
-                            
-                            # Verify connection
-                            echo "✅ Connected to AKS. Nodes:"
-                            kubectl get nodes -o wide
-                        '''
-                    }
+                    echo "🔧 Verifying AKS access..."
+                    sh '''
+                        echo "✅ Connected to AKS. Nodes:"
+                        kubectl get nodes -o wide
+                    '''
                 }
             }
         }

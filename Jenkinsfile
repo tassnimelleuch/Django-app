@@ -765,8 +765,10 @@ fi
                         echo "⏳ Waiting for port-forward to establish..."
                         TIMEOUT=10
                         while [ $TIMEOUT -gt 0 ]; do
-                            if curl -s -o /dev/null -w "%{http_code}" http://localhost:8000 | grep -q "200\|400\|302"; then
-                                echo "✅ Port-forward is ready!"
+                            # FIXED: Using grep -E instead of backslashes
+                            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000 || echo "000")
+                            if echo "$HTTP_CODE" | grep -qE "200|400|302"; then
+                                echo "✅ Port-forward is ready! (HTTP $HTTP_CODE)"
                                 break
                             fi
                             sleep 1
@@ -775,18 +777,20 @@ fi
                         
                         if [ $TIMEOUT -eq 0 ]; then
                             echo "⚠️ Port-forward still starting... continuing anyway"
+                            echo "Last HTTP code: $HTTP_CODE"
                         fi
                         
                         # Show status
-                        ps aux | grep port-forward
-                        tail -5 port-forward.log
+                        echo "📊 Port-forward process:"
+                        ps aux | grep port-forward || true
+                        echo "📋 Last 5 lines of log:"
+                        tail -5 port-forward.log 2>/dev/null || echo "No log file yet"
                     '''
                     
                     echo "✅ Port-forward stage complete! App should be accessible at http://51.103.56.25:8000"
                 }
-            }
-        }
     }
+}    }
     
     post {
         always {

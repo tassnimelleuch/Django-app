@@ -3,7 +3,7 @@ pipeline {
     
     options {
         buildDiscarder(logRotator(numToKeepStr: '10'))
-        timeout(time: 20, unit: 'MINUTES')  // Increased timeout for image pulls
+        timeout(time: 20, unit: 'MINUTES')  
     }
     
     environment {
@@ -37,13 +37,16 @@ pipeline {
         GITHUB_OWNER = 'tassnimelleuch'
         SONAR_PROJECT_KEY = 'tassnimelleuch_Django-app'
         
+        // ===== AZURE AKS CONFIGURATION - UPDATED TO MATCH YOUR CLUSTER =====
+        AZURE_RESOURCE_GROUP = 'aks-deployment'    
+        AKS_CLUSTER_NAME = 'django-app'                   
         K8S_NAMESPACE = 'default'
         K8S_DEPLOYMENT = 'django-contact-app'
         K8S_SERVICE = 'django-contact-service'
         
-        // Minikube environment for Jenkins
-        MINIKUBE_HOME = '/var/lib/jenkins'
-        KUBECONFIG = '/var/lib/jenkins/.kube/config'
+        // ===== MINIKUBE CONFIGURATION (KEPT FOR REFERENCE) =====
+        // MINIKUBE_HOME = '/var/lib/jenkins'
+        // MINIKUBE_KUBECONFIG = '/var/lib/jenkins/.kube/config'
     }
     
     stages {
@@ -332,8 +335,10 @@ fi
             }
         }
         
-        // ============= FIXED MINIKUBE CD STAGES =============
-
+        // ===================================================================
+        // MINIKUBE DEPLOYMENT STAGES (KEPT FOR REFERENCE - DO NOT DELETE)
+        // ===================================================================
+        /*
         stage('Setup Minikube Access') {
             steps {
                 script {
@@ -540,6 +545,254 @@ fi
                 }
             }
         }
+        */
+        
+        // ===================================================================
+        // AZURE AKS DEPLOYMENT STAGES - UPDATED FOR YOUR CLUSTER
+        // ===================================================================
+        
+        stage('Setup AKS Access') {
+            steps {
+                script {
+                    echo "🔧 Setting up AKS access..."
+                    withCredentials([azureServicePrincipal(
+                        credentialsId: 'azure-service-principal',
+                        subscriptionIdVariable: 'AZURE_SUBSCRIPTION_ID',
+                        clientIdVariable: 'AZURE_CLIENT_ID',
+                        clientSecretVariable: 'AZURE_CLIENT_SECRET',
+                        tenantIdVariable: 'AZURE_TENANT_ID'
+                    )]) {
+                        sh '''
+                            # Login to Azure using the kubeconfig we already set up
+                            # Since we manually configured kubectl, we can just use it directly
+                            
+                            # Verify connection
+                            echo "✅ Connected to AKS. Nodes:"
+                            kubectl get nodes -o wide
+                        '''
+                    }
+                }
+            }
+        }
+        
+        stage('Prepare Kubernetes Manifests') {
+            steps {
+                script {
+                    echo "📝 Preparing Kubernetes manifests for AKS..."
+                    
+                    // Update image tag in deployment
+                    sh """
+                        sed -i 's|image: tasnimelleuchenis/django-contact-app:.*|image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}|g' k8s/deployment.yaml
+                        echo "✅ Updated deployment with new image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
+                    """
+                    
+                    // Show the updated image
+                    sh "grep -A1 'image:' k8s/deployment.yaml | head -2"
+                }
+            }
+        }
+        
+        stage('Deploy to AKS') {
+            steps {
+                script {
+                    echo "🚀 Deploying to Azure Kubernetes Service..."
+                    
+                    sh '''
+                        # Function to apply with retry
+                        apply_with_retry() {
+                            local file=$1
+                            local name=$2
+                            local max_retries=3
+                            local retry=0
+                            
+                            echo "📄 Applying $name from $file..."
+                            
+                            while [ $retry -lt $max_retries ]; do
+                                if kubectl apply -f $file --namespace ${K8S_NAMESPACE}; then
+                                    echo "✅ $name applied successfully"
+                                    return 0
+                                else
+                                    retry=$((retry+1))
+                                    if [ $retry -lt $max_retries ]; then
+                                        echo "⚠️ Attempt $retry failed, retrying in 5 seconds..."
+                                        sleep 5
+                                    fi
+                                fi
+                            done
+                            
+                            echo "❌ Failed to apply $name after $max_retries attempts"
+                            return 1
+                        }
+                        
+                        # Create namespace if it doesn't exist
+                        kubectl create namespace ${K8S_NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
+                        
+                        # Apply secrets first (if they exist)
+                        if [ -f k8s/secret.yaml ]; then
+                            echo "📄 Applying secrets..."
+                            kubectl apply -f k8s/secret.yaml --namespace ${K8S_NAMESPACE}
+                        fi
+                        
+                        # Apply PVC (persistent storage)
+                        echo "📄 Applying PVC (10Mi)..."
+                        if [ -f k8s/pvc.yaml ]; then
+                            apply_with_retry "k8s/pvc.yaml" "PVC" || exit 1
+                        else
+                            echo "⚠️ PVC file not found, skipping..."
+                        fi
+                        
+                        # Apply deployment
+                        echo "📄 Applying deployment with image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
+                        apply_with_retry "k8s/deployment.yaml" "Deployment" || exit 1
+                        
+                        # Apply service (NodePort - free!)
+                        echo "📄 Applying service (NodePort - no extra cost)..."
+                        if [ -f k8s/service.yaml ]; then
+                            apply_with_retry "k8s/service.yaml" "Service" || exit 1
+                        else
+                            echo "⚠️ Service file not found, skipping..."
+                        fi
+                        
+                        echo "✅ All Kubernetes resources applied successfully"
+                        
+                        # Show current resources
+                        echo "📊 Current pods:"
+                        kubectl get pods -n ${K8S_NAMESPACE} -l app=django-contact-app
+                        
+                        echo "📊 Current services:"
+                        kubectl get services -n ${K8S_NAMESPACE}
+                    '''
+                }
+            }
+        }
+
+        stage('Wait for AKS Rollout') {
+            steps {
+                script {
+                    echo "⏳ Waiting for AKS deployment to be ready..."
+                    
+                    sh '''
+                        # Show pod status during wait
+                        kubectl get pods -n ${K8S_NAMESPACE} -l app=django-contact-app -w &
+                        WATCH_PID=$!
+                        
+                        echo "Waiting for rollout to complete..."
+                        if kubectl rollout status deployment/${K8S_DEPLOYMENT} --namespace ${K8S_NAMESPACE} --timeout=300s; then
+                            kill $WATCH_PID 2>/dev/null || true
+                            echo "✅ Deployment rollout successful"
+                        else
+                            kill $WATCH_PID 2>/dev/null || true
+                            echo "❌ Deployment rollout failed"
+                            
+                            # Debug information
+                            POD_NAME=$(kubectl get pods -n ${K8S_NAMESPACE} -l app=django-contact-app -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+                            if [ -n "$POD_NAME" ]; then
+                                echo "📋 Pod events:"
+                                kubectl describe pod $POD_NAME -n ${K8S_NAMESPACE} | grep -A 20 Events
+                                echo "📋 Init container logs:"
+                                kubectl logs $POD_NAME -c fix-permissions -n ${K8S_NAMESPACE} 2>/dev/null || echo "No fix-permissions logs"
+                                kubectl logs $POD_NAME -c migrate -n ${K8S_NAMESPACE} 2>/dev/null || echo "No migrate logs"
+                            fi
+                            exit 1
+                        fi
+                    '''
+                }
+            }
+        }
+
+        stage('Verify AKS Deployment') {
+            steps {
+                script {
+                    echo "🔍 Verifying AKS deployment..."
+                    
+                    sh '''
+                        # Get pod name
+                        POD_NAME=$(kubectl get pods -n ${K8S_NAMESPACE} -l app=django-contact-app -o jsonpath='{.items[0].metadata.name}')
+                        echo "📦 Pod: $POD_NAME"
+                        
+                        # Wait for pod to be fully ready
+                        echo "Waiting for pod to be ready..."
+                        kubectl wait --for=condition=ready pod/$POD_NAME --namespace ${K8S_NAMESPACE} --timeout=60s || {
+                            echo "❌ Pod not ready"
+                            kubectl describe pod $POD_NAME -n ${K8S_NAMESPACE}
+                            exit 1
+                        }
+                        
+                        # Check pod status
+                        POD_STATUS=$(kubectl get pod $POD_NAME -n ${K8S_NAMESPACE} -o jsonpath='{.status.phase}')
+                        echo "📊 Pod status: $POD_STATUS"
+                        
+                        if [ "$POD_STATUS" = "Running" ]; then
+                            echo "✅ Pod is running"
+                            
+                            # Check initContainers logs
+                            echo "📋 fix-permissions logs:"
+                            kubectl logs $POD_NAME -c fix-permissions -n ${K8S_NAMESPACE} 2>/dev/null || echo "No fix-permissions logs"
+                            
+                            echo "📋 migrate logs:"
+                            kubectl logs $POD_NAME -c migrate -n ${K8S_NAMESPACE} 2>/dev/null || echo "No migrate logs"
+                            
+                            echo "📋 Main container logs (last 20 lines):"
+                            kubectl logs $POD_NAME -n ${K8S_NAMESPACE} --tail=20 2>/dev/null || echo "No main container logs"
+                        else
+                            echo "❌ Pod is not running! Status: $POD_STATUS"
+                            kubectl describe pod $POD_NAME -n ${K8S_NAMESPACE}
+                            exit 1
+                        fi
+                        
+                        # Get service access details (NodePort)
+                        echo "🌐 Getting service access details..."
+                        NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[0].address}')
+                        NODE_PORT=$(kubectl get service ${K8S_SERVICE} -n ${K8S_NAMESPACE} -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo "Not found")
+                        
+                        if [ "$NODE_PORT" != "Not found" ] && [ -n "$NODE_IP" ]; then
+                            echo "✅ Application is accessible at: http://$NODE_IP:$NODE_PORT"
+                            
+                            # Test the endpoint (optional - may need to wait for app to fully start)
+                            echo "Testing application endpoint (may take a moment)..."
+                            sleep 5
+                            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://$NODE_IP:$NODE_PORT || echo "Failed")
+                            echo "HTTP Status: $HTTP_CODE"
+                            
+                            if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "302" ] || [ "$HTTP_CODE" = "301" ]; then
+                                echo "✅ Application is responding!"
+                            else
+                                echo "⚠️ Application returned HTTP $HTTP_CODE - may still be starting up"
+                            fi
+                        else
+                            echo "⚠️ Could not get NodePort service details"
+                            kubectl get services -n ${K8S_NAMESPACE}
+                        fi
+                    '''
+                }
+            }
+        }
+
+        stage('Rollback on Failure') {
+            when {
+                expression { currentBuild.result == 'FAILURE' }
+            }
+            steps {
+                script {
+                    echo "⚠️ Deployment failed! Rolling back to previous version..."
+                    
+                    sh '''
+                        echo "Undoing deployment..."
+                        kubectl rollout undo deployment/${K8S_DEPLOYMENT} --namespace ${K8S_NAMESPACE}
+                        
+                        echo "Waiting for rollback..."
+                        kubectl rollout status deployment/${K8S_DEPLOYMENT} --namespace ${K8S_NAMESPACE} --timeout=60s
+                        
+                        echo "✅ Rollback completed"
+                        
+                        # Show current pods after rollback
+                        kubectl get pods -n ${K8S_NAMESPACE} -l app=django-contact-app
+                    '''
+                    
+                    echo "✅ Rollback finished"
+                }
+            }
+        }
     }
     
     post {
@@ -562,12 +815,34 @@ fi
             echo "📊 View on SonarCloud: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
             
             script {
+                // Try to get the NodePort URL for easy access
+                def NODE_IP = sh(
+                    script: "kubectl get nodes -o jsonpath='{.items[0].status.addresses[0].address}' 2>/dev/null || echo 'Not available'",
+                    returnStdout: true
+                ).trim()
+                
+                def NODE_PORT = sh(
+                    script: "kubectl get service ${K8S_SERVICE} -n ${K8S_NAMESPACE} -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo 'Not available'",
+                    returnStdout: true
+                ).trim()
+                
+                if (NODE_IP != 'Not available' && NODE_PORT != 'Not available') {
+                    echo "🌐 Access your app at: http://${NODE_IP}:${NODE_PORT}"
+                } else {
+                    echo "🌐 AKS app deployed! Use 'kubectl get services' to find the access point."
+                }
+            }
+            
+            // MINIKUBE URL (KEPT FOR REFERENCE)
+            /*
+            script {
                 def SERVICE_URL = sh(
                     script: "minikube service ${K8S_SERVICE} --url || echo 'Service not available'",
                     returnStdout: true
                 ).trim()
                 echo "🌐 Access your app at: ${SERVICE_URL}"
             }
+            */
         }
         
         failure {

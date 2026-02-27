@@ -551,17 +551,7 @@ fi
         // AZURE AKS DEPLOYMENT STAGES - UPDATED FOR YOUR CLUSTER
         // ===================================================================
  
-        stage('Setup AKS Access') {
-            steps {
-                script {
-                    echo "🔧 Verifying AKS access..."
-                    sh '''
-                        echo "✅ Connected to AKS. Nodes:"
-                        kubectl get nodes -o wide
-                    '''
-                }
-            }
-        }
+
         
         stage('Prepare Kubernetes Manifests') {
             steps {
@@ -748,45 +738,7 @@ fi
                 }
             }
         }
-        stage('Setup Port-Forward Access') {
-            steps {
-                script {
-                    echo "🔌 Setting up port-forward for instant access..."
-                    
-                    sh '''
-                        # Kill any existing port-forwards (including jenkins user's)
-                        sudo pkill -f "kubectl port-forward" || true
-                        sleep 2
-                        
-                        # Make sure no process is hanging onto port 8000
-                        sudo fuser -k 8000/tcp 2>/dev/null || true
-                        sleep 2
-                        
-                        # Start port-forward with explicit environment and output
-                        nohup kubectl port-forward --address 0.0.0.0 service/django-contact-service 8000:8000 -n default > port-forward.log 2>&1 &
-                        
-                        # Give it time to start
-                        sleep 5
-                        
-                        # Verify it's running and bound correctly
-                        echo "📊 Port-forward process:"
-                        ps aux | grep port-forward
-                        
-                        echo "📊 Port binding check:"
-                        ss -tulpn | grep 8000 || echo "⚠️ Port 8000 not bound yet"
-                        
-                        echo "📋 Port-forward logs:"
-                        tail -20 port-forward.log
-                        
-                        # Test connection
-                        echo "🔍 Testing connection..."
-                        curl -I http://localhost:8000 || echo "⚠️ Not responding yet - may need ALLOWED_HOSTS update"
-                    '''
-                    
-                    echo "✅ Port-forward stage complete!"
-                }
-            }
-        }
+
     } 
     post {
         always {

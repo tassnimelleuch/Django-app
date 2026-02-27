@@ -555,14 +555,16 @@ fi
                 script {
                     echo "🔑 Ensuring Django secret exists..."
                     sh '''
-                        # Check if secret exists, create if it doesn't
-                        if ! kubectl get secret django-secrets -n default &>/dev/null; then
+                        # Check if secret exists
+                        if kubectl get secret django-secrets -n default &>/dev/null; then
+                            echo "✅ Secret already exists - continuing..."
+                        else
                             echo "Creating django-secrets..."
+                            SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_urlsafe(50))")
                             kubectl create secret generic django-secrets \
                                 --namespace default \
-                                --from-literal=secret-key=$(python3 -c "import secrets; print(secrets.token_urlsafe(50))")
-                        else
-                            echo "Secret already exists"
+                                --from-literal=secret-key="$SECRET_KEY"
+                            echo "✅ Secret created successfully"
                         fi
                     '''
                 }

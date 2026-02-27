@@ -769,24 +769,27 @@ fi
             echo "📦 View on Docker Hub: https://hub.docker.com/r/${env.DOCKER_IMAGE_NAME}/tags"
             echo "📊 View on SonarCloud: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
             
-            script {
-                // Try to get the NodePort URL for easy access
-                def NODE_IP = sh(
-                    script: "kubectl get nodes -o jsonpath='{.items[0].status.addresses[0].address}' 2>/dev/null || echo 'Not available'",
-                    returnStdout: true
-                ).trim()
-                
-                def NODE_PORT = sh(
-                    script: "kubectl get service ${K8S_SERVICE} -n ${K8S_NAMESPACE} -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo 'Not available'",
-                    returnStdout: true
-                ).trim()
-                
-                if (NODE_IP != 'Not available' && NODE_PORT != 'Not available') {
-                    echo "🌐 Access your app at: http://${NODE_IP}:${NODE_PORT}"
-                } else {
-                    echo "🌐 AKS app deployed! Use 'kubectl get services' to find the access point."
+               script {
+                    // For NodePort (your current setup)
+                    def VM_PUBLIC_IP = "51.103.56.25"
+                    def NODE_PORT = sh(
+                        script: "kubectl get service ${K8S_SERVICE} -n ${K8S_NAMESPACE} -o jsonpath='{.spec.ports[0].nodePort}'",
+                        returnStdout: true
+                    ).trim()
+                    
+                    echo "🌐 Access your app via NodePort: http://${VM_PUBLIC_IP}:${NODE_PORT}"
+                    echo "📝 Or use port-forward: kubectl port-forward svc/${K8S_SERVICE} 8000:8000 -n ${K8S_NAMESPACE}"
+                    
+                    // If you ever enable LoadBalancer, this will show it
+                    def LB_IP = sh(
+                        script: "kubectl get service ${K8S_SERVICE} -n ${K8S_NAMESPACE} -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo ''",
+                        returnStdout: true
+                    ).trim()
+                    
+                    if (LB_IP) {
+                        echo "🌐 Public LoadBalancer URL: http://${LB_IP}:8000"
+                    }
                 }
-            }
             
             // MINIKUBE URL (KEPT FOR REFERENCE)
             /*

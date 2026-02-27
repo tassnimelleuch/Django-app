@@ -754,44 +754,40 @@ fi
                     echo "🔌 Setting up port-forward for instant access..."
                     
                     sh '''
-                        # Kill any existing port-forwards
-                        pkill -f "kubectl port-forward" || true
+                        # Kill any existing port-forwards (including jenkins user's)
+                        sudo pkill -f "kubectl port-forward" || true
                         sleep 2
                         
-                        # Start port-forward
+                        # Make sure no process is hanging onto port 8000
+                        sudo fuser -k 8000/tcp 2>/dev/null || true
+                        sleep 2
+                        
+                        # Start port-forward with explicit environment and output
                         nohup kubectl port-forward --address 0.0.0.0 service/django-contact-service 8000:8000 -n default > port-forward.log 2>&1 &
                         
-                        # Wait for it to be ready (with timeout)
-                        echo "⏳ Waiting for port-forward to establish..."
-                        TIMEOUT=10
-                        while [ $TIMEOUT -gt 0 ]; do
-                            # FIXED: Using grep -E instead of backslashes
-                            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000 || echo "000")
-                            if echo "$HTTP_CODE" | grep -qE "200|400|302"; then
-                                echo "✅ Port-forward is ready! (HTTP $HTTP_CODE)"
-                                break
-                            fi
-                            sleep 1
-                            TIMEOUT=$((TIMEOUT-1))
-                        done
+                        # Give it time to start
+                        sleep 5
                         
-                        if [ $TIMEOUT -eq 0 ]; then
-                            echo "⚠️ Port-forward still starting... continuing anyway"
-                            echo "Last HTTP code: $HTTP_CODE"
-                        fi
-                        
-                        # Show status
+                        # Verify it's running and bound correctly
                         echo "📊 Port-forward process:"
-                        ps aux | grep port-forward || true
-                        echo "📋 Last 5 lines of log:"
-                        tail -5 port-forward.log 2>/dev/null || echo "No log file yet"
+                        ps aux | grep port-forward
+                        
+                        echo "📊 Port binding check:"
+                        ss -tulpn | grep 8000 || echo "⚠️ Port 8000 not bound yet"
+                        
+                        echo "📋 Port-forward logs:"
+                        tail -20 port-forward.log
+                        
+                        # Test connection
+                        echo "🔍 Testing connection..."
+                        curl -I http://localhost:8000 || echo "⚠️ Not responding yet - may need ALLOWED_HOSTS update"
                     '''
                     
-                    echo "✅ Port-forward stage complete! App should be accessible at http://51.103.56.25:8000"
+                    echo "✅ Port-forward stage complete!"
                 }
-    }
-}    }
-    
+            }
+        }
+            
     post {
         always {
             archiveArtifacts artifacts: 'coverage.xml, junit-results.xml, pylint-report.json, sonar-check.json', allowEmptyArchive: true

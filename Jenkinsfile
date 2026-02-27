@@ -748,6 +748,27 @@ fi
                 }
             }
         }
+        stage('Setup Port-Forward Access') {
+            steps {
+                script {
+                    echo "🔌 Setting up port-forward for instant access..."
+                    
+                    // Kill any existing port-forwards
+                    sh 'pkill -f "kubectl port-forward" || true'
+                    
+                    // Start port-forward in background (binds to all interfaces)
+                    sh '''
+                        nohup kubectl port-forward --address 0.0.0.0 service/django-contact-service 8000:8000 -n default > port-forward.log 2>&1 &
+                        sleep 3  # Give it time to start
+                    '''
+                    
+                    // Verify it's running
+                    sh 'ps aux | grep port-forward'
+                    
+                    echo "✅ Port-forward is running!"
+                }
+            }
+        }
     }
     
     post {
@@ -766,30 +787,32 @@ fi
             echo "✅✅✅ PIPELINE SUCCESSFUL! ✅✅✅"
             echo "📅 Build: ${HUMAN_READABLE_DATE} (#${BUILD_NUMBER})"
             echo "🐳 Docker image: ${env.DOCKER_IMAGE_NAME}:${env.DOCKER_IMAGE_TAG}"
-            echo "📦 View on Docker Hub: https://hub.docker.com/r/${env.DOCKER_IMAGE_NAME}/tags"
-            echo "📊 View on SonarCloud: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
             
-               script {
-                    // For NodePort (your current setup)
-                    def VM_PUBLIC_IP = "51.103.56.25"
-                    def NODE_PORT = sh(
-                        script: "kubectl get service ${K8S_SERVICE} -n ${K8S_NAMESPACE} -o jsonpath='{.spec.ports[0].nodePort}'",
-                        returnStdout: true
-                    ).trim()
-                    
-                    echo "🌐 Access your app via NodePort: http://${VM_PUBLIC_IP}:${NODE_PORT}"
-                    echo "📝 Or use port-forward: kubectl port-forward svc/${K8S_SERVICE} 8000:8000 -n ${K8S_NAMESPACE}"
-                    
-                    // If you ever enable LoadBalancer, this will show it
-                    def LB_IP = sh(
-                        script: "kubectl get service ${K8S_SERVICE} -n ${K8S_NAMESPACE} -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo ''",
-                        returnStdout: true
-                    ).trim()
-                    
-                    if (LB_IP) {
-                        echo "🌐 Public LoadBalancer URL: http://${LB_IP}:8000"
-                    }
-                }
+            script {
+                // Your VM's public IP (hardcoded since it's static)
+                def VM_PUBLIC_IP = "51.103.56.25"
+                
+                // Get the NodePort
+                def NODE_PORT = sh(
+                    script: "kubectl get service ${K8S_SERVICE} -n ${K8S_NAMESPACE} -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo '30000'",
+                    returnStdout: true
+                ).trim()
+                
+                echo "🌐🌐🌐 ACCESS YOUR APP HERE: http://${VM_PUBLIC_IP}:8000 🌐🌐🌐"
+                echo ""
+                echo "📱 Quick Access Links:"
+                echo "   • Via port-forward (FASTEST): http://${VM_PUBLIC_IP}:8000"
+                echo "   • Via NodePort (if port-forward fails): http://${VM_PUBLIC_IP}:${NODE_PORT}"
+                echo ""
+                echo "🔍 Debug Commands (run on VM):"
+                echo "   • Check port-forward: ps aux | grep port-forward"
+                echo "   • View logs: cat port-forward.log"
+                echo "   • Restart manually: kubectl port-forward --address 0.0.0.0 service/${K8S_SERVICE} 8000:8000 -n ${K8S_NAMESPACE}"
+                echo ""
+                echo "📊 View on Docker Hub: https://hub.docker.com/r/${env.DOCKER_IMAGE_NAME}/tags"
+                echo "📊 View on SonarCloud: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
+            }
+
             
             // MINIKUBE URL (KEPT FOR REFERENCE)
             /*

@@ -550,26 +550,7 @@ fi
         // ===================================================================
         // AZURE AKS DEPLOYMENT STAGES - UPDATED FOR YOUR CLUSTER
         // ===================================================================
-        stage('Ensure Secret Exists') {
-            steps {
-                script {
-                    echo "🔑 Ensuring Django secret exists..."
-                    sh '''
-                        # Check if secret exists
-                        if kubectl get secret django-secrets -n default &>/dev/null; then
-                            echo "✅ Secret already exists - continuing..."
-                        else
-                            echo "Creating django-secrets..."
-                            SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_urlsafe(50))")
-                            kubectl create secret generic django-secrets \
-                                --namespace default \
-                                --from-literal=secret-key="$SECRET_KEY"
-                            echo "✅ Secret created successfully"
-                        fi
-                    '''
-                }
-            }
-        }
+ 
         stage('Setup AKS Access') {
             steps {
                 script {

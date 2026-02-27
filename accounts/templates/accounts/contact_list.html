@@ -26,7 +26,7 @@
         <div class="contact-card">
             <h3>{{ contact.first_name }} {{ contact.last_name }}</h3>
             <p>📧 {{ contact.email|default:"No email" }}</p>
-            <p>🔗 {{ contact.linkedin|default:"No LinkedIn" }}</p>
+            <p>🔗 🔗 🔗 🔗  {{ contact.linkedin|default:"No LinkedIn" }}</p>
             <p>📅 Added: {{ contact.created_at|date:"M d, Y" }}</p>
             <a href="{% url 'contact_detail' contact.id %}">Details →</a>
         </div>

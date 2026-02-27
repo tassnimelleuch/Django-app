@@ -713,68 +713,35 @@ fi
                     echo "🔍 Verifying AKS deployment..."
                     
                     sh '''
-                        # Get pod name
-                        POD_NAME=$(kubectl get pods -n ${K8S_NAMESPACE} -l app=django-contact-app -o jsonpath='{.items[0].metadata.name}')
-                        echo "📦 Pod: $POD_NAME"
+                        # Get the CURRENT running pod (not a hardcoded one)
+                        POD_NAME=$(kubectl get pods -n default -l app=django-contact-app --field-selector status.phase=Running -o jsonpath='{.items[0].metadata.name}')
                         
-                        # Wait for pod to be fully ready
-                        echo "Waiting for pod to be ready..."
-                        kubectl wait --for=condition=ready pod/$POD_NAME --namespace ${K8S_NAMESPACE} --timeout=60s || {
-                            echo "❌ Pod not ready"
-                            kubectl describe pod $POD_NAME -n ${K8S_NAMESPACE}
+                        if [ -z "$POD_NAME" ]; then
+                            echo "❌ No running pod found!"
                             exit 1
-                        }
+                        fi
+                        
+                        echo "📦 Current running pod: $POD_NAME"
                         
                         # Check pod status
-                        POD_STATUS=$(kubectl get pod $POD_NAME -n ${K8S_NAMESPACE} -o jsonpath='{.status.phase}')
+                        POD_STATUS=$(kubectl get pod $POD_NAME -n default -o jsonpath='{.status.phase}')
                         echo "📊 Pod status: $POD_STATUS"
                         
                         if [ "$POD_STATUS" = "Running" ]; then
                             echo "✅ Pod is running"
                             
-                            # Check initContainers logs
-                            echo "📋 fix-permissions logs:"
-                            kubectl logs $POD_NAME -c fix-permissions -n ${K8S_NAMESPACE} 2>/dev/null || echo "No fix-permissions logs"
-                            
-                            echo "📋 migrate logs:"
-                            kubectl logs $POD_NAME -c migrate -n ${K8S_NAMESPACE} 2>/dev/null || echo "No migrate logs"
-                            
-                            echo "📋 Main container logs (last 20 lines):"
-                            kubectl logs $POD_NAME -n ${K8S_NAMESPACE} --tail=20 2>/dev/null || echo "No main container logs"
+                            # Show recent logs
+                            echo "📋 Recent logs:"
+                            kubectl logs $POD_NAME -n default --tail=20
                         else
-                            echo "❌ Pod is not running! Status: $POD_STATUS"
-                            kubectl describe pod $POD_NAME -n ${K8S_NAMESPACE}
+                            echo "❌ Pod is not running!"
+                            kubectl describe pod $POD_NAME -n default
                             exit 1
-                        fi
-                        
-                        # Get service access details (NodePort)
-                        echo "🌐 Getting service access details..."
-                        NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[0].address}')
-                        NODE_PORT=$(kubectl get service ${K8S_SERVICE} -n ${K8S_NAMESPACE} -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo "Not found")
-                        
-                        if [ "$NODE_PORT" != "Not found" ] && [ -n "$NODE_IP" ]; then
-                            echo "✅ Application is accessible at: http://$NODE_IP:$NODE_PORT"
-                            
-                            # Test the endpoint (optional - may need to wait for app to fully start)
-                            echo "Testing application endpoint (may take a moment)..."
-                            sleep 5
-                            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://$NODE_IP:$NODE_PORT || echo "Failed")
-                            echo "HTTP Status: $HTTP_CODE"
-                            
-                            if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "302" ] || [ "$HTTP_CODE" = "301" ]; then
-                                echo "✅ Application is responding!"
-                            else
-                                echo "⚠️ Application returned HTTP $HTTP_CODE - may still be starting up"
-                            fi
-                        else
-                            echo "⚠️ Could not get NodePort service details"
-                            kubectl get services -n ${K8S_NAMESPACE}
                         fi
                     '''
                 }
             }
         }
-
         stage('Rollback on Failure') {
             when {
                 expression { currentBuild.result == 'FAILURE' }

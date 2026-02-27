@@ -753,19 +753,36 @@ fi
                 script {
                     echo "🔌 Setting up port-forward for instant access..."
                     
-                    // Kill any existing port-forwards
-                    sh 'pkill -f "kubectl port-forward" || true'
-                    
-                    // Start port-forward in background (binds to all interfaces)
                     sh '''
+                        # Kill any existing port-forwards
+                        pkill -f "kubectl port-forward" || true
+                        sleep 2
+                        
+                        # Start port-forward
                         nohup kubectl port-forward --address 0.0.0.0 service/django-contact-service 8000:8000 -n default > port-forward.log 2>&1 &
-                        sleep 3  # Give it time to start
+                        
+                        # Wait for it to be ready (with timeout)
+                        echo "⏳ Waiting for port-forward to establish..."
+                        TIMEOUT=10
+                        while [ $TIMEOUT -gt 0 ]; do
+                            if curl -s -o /dev/null -w "%{http_code}" http://localhost:8000 | grep -q "200\|400\|302"; then
+                                echo "✅ Port-forward is ready!"
+                                break
+                            fi
+                            sleep 1
+                            TIMEOUT=$((TIMEOUT-1))
+                        done
+                        
+                        if [ $TIMEOUT -eq 0 ]; then
+                            echo "⚠️ Port-forward still starting... continuing anyway"
+                        fi
+                        
+                        # Show status
+                        ps aux | grep port-forward
+                        tail -5 port-forward.log
                     '''
                     
-                    // Verify it's running
-                    sh 'ps aux | grep port-forward'
-                    
-                    echo "✅ Port-forward is running!"
+                    echo "✅ Port-forward stage complete! App should be accessible at http://51.103.56.25:8000"
                 }
             }
         }

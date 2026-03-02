@@ -749,9 +749,16 @@ fi
                         export KUBECONFIG=/var/lib/jenkins/.kube/config
                         export HOME=/var/lib/jenkins
                         
-                        # Kill any existing
+                        # KILL EVERYTHING on port 8000 (this is the key!)
+                        echo "Killing all processes on port 8000..."
+                        fuser -k 8000/tcp || true
                         pkill -f "kubectl port-forward" || true
+                        killall kubectl 2>/dev/null || true
+                        
+                        # Double-check port is free
                         sleep 3
+                        echo "Checking if port 8000 is free:"
+                        ss -tlnp | grep 8000 || echo "✅ Port 8000 is free"
                         
                         # Test kubectl first
                         echo "Testing kubectl..."
@@ -764,16 +771,14 @@ fi
                         PF_PID=$!
                         
                         # Wait and check
-                        sleep 10
+                        sleep 5
                         
                         if ps -p $PF_PID > /dev/null; then
                             echo "✅ Port-forward process running with PID: $PF_PID"
-                            echo "Process details:"
-                            ps -f $PF_PID
                             
                             # Test connection
                             echo "Testing local connection..."
-                            curl -v http://localhost:8000 || echo "Connection test failed"
+                            curl -s http://localhost:8000 | head -20 || echo "⚠️ Connection test failed (app might need time to start)"
                             
                             echo "=== Last 20 lines of log ==="
                             tail -20 /tmp/port-forward.log

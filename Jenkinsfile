@@ -739,39 +739,39 @@ fi
             }
         }
         stage('Setup Port-Forwarding') {
-            steps {
-                script {
-                    echo "🔌 Setting up port-forwarding..."
+        steps {
+            script {
+                echo "🔌 Setting up port-forwarding..."
+                
+                sh '''
+                    # Kill any existing
+                    pkill -f "kubectl port-forward" || true
+                    sleep 2
                     
-                    sh '''
-                        # Kill any existing
-                        pkill -f "kubectl port-forward" || true
-                        sleep 2
-                        
-                        # Start port-forward to SERVICE (more stable)
-                        cd /tmp
-                        nohup kubectl port-forward --address 0.0.0.0 service/django-contact-service 8000:8000 -n default > /tmp/port-forward.log 2>&1 &
-                        
-                        # Wait and verify
-                        sleep 5
-                        
-                        if pgrep -f "kubectl port-forward.*service" > /dev/null; then
-                            echo "✅ Port-forward started successfully"
-                        else
-                            echo "❌ Port-forward failed to start"
-                            echo "=== LOGS ==="
-                            cat /tmp/port-forward.log
-                            exit 1
-                        fi
-                        
-                        # Test the connection
-                        echo "Testing connection..."
-                        curl -s localhost:8000 || echo "⚠️ Connection test failed"
-                    '''
-                }
+                    # Start port-forward to SERVICE (more stable)
+                    cd /tmp
+                    nohup kubectl port-forward --address 0.0.0.0 service/django-contact-service 8000:8000 -n default > /tmp/port-forward.log 2>&1 &
+                    
+                    # Wait and verify
+                    sleep 5
+                    
+                    if pgrep -f "kubectl port-forward.*service" > /dev/null; then
+                        echo "✅ Port-forward started successfully"
+                    else
+                        echo "❌ Port-forward failed to start"
+                        echo "=== LOGS ==="
+                        cat /tmp/port-forward.log
+                        exit 1
+                    fi
+                    
+                    # Test the connection
+                    echo "Testing connection..."
+                    curl -s localhost:8000 || echo "⚠️ Connection test failed"
+                '''
             }
         }
-        }
+    }
+        
     } 
     post {
         always {

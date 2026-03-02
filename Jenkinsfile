@@ -741,48 +741,36 @@ fi
         stage('Setup Port-Forwarding') {
             steps {
                 script {
-                    echo "🔌 Setting up port-forwarding to running pod..."
+                    echo "🔌 Setting up port-forwarding..."
                     
                     sh '''
-                        # First, kill any process on port 8000 as root
-                        sudo fuser -k 8000/tcp || true
-                        
-                        # Also kill any kubectl port-forward processes
-                        sudo pkill -f "kubectl port-forward" || true
+                        # Kill any existing
                         pkill -f "kubectl port-forward" || true
+                        sleep 2
                         
-                        sleep 3
-                        
-                        # Get the current running pod name
-                        POD_NAME=$(kubectl get pods -n default -l app=django-contact-app --field-selector status.phase=Running -o jsonpath='{.items[0].metadata.name}')
-                        
-                        if [ -z "$POD_NAME" ]; then
-                            echo "❌ No running pod found!"
-                            kubectl get pods -n default -l app=django-contact-app
-                            exit 1
-                        fi
-                        
-                        echo "Found running pod: $POD_NAME"
-                        
-                        # Start port-forward to the specific pod
+                        # Start port-forward to SERVICE (more stable)
                         cd /tmp
-                        nohup kubectl port-forward --address 0.0.0.0 pod/$POD_NAME 8000:8000 -n default > /tmp/port-forward.log 2>&1 &
+                        nohup kubectl port-forward --address 0.0.0.0 service/django-contact-service 8000:8000 -n default > /tmp/port-forward.log 2>&1 &
                         
                         # Wait and verify
                         sleep 5
                         
-                        if pgrep -f "kubectl port-forward.*$POD_NAME" > /dev/null; then
+                        if pgrep -f "kubectl port-forward.*service" > /dev/null; then
                             echo "✅ Port-forward started successfully"
-                            echo "App available at: http://51.103.56.25:8000"
                         else
                             echo "❌ Port-forward failed to start"
-                            echo "Last 20 lines of log:"
-                            tail -20 /tmp/port-forward.log
+                            echo "=== LOGS ==="
+                            cat /tmp/port-forward.log
                             exit 1
                         fi
+                        
+                        # Test the connection
+                        echo "Testing connection..."
+                        curl -s localhost:8000 || echo "⚠️ Connection test failed"
                     '''
                 }
             }
+        }
         }
     } 
     post {

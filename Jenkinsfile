@@ -745,24 +745,27 @@ fi
                     
                     sh '''
                         # Kill existing
-                        pkill -f "kubectl port-forward" || true
-                        sudo fuser -k 8000/tcp || true
+                        pkill -f "kubectl port-forward" 2>/dev/null || true
+                        fuser -k 8000/tcp 2>/dev/null || true
                         sleep 3
                         
-                        # Start with nohup and disown
-                        export KUBECONFIG=/var/lib/jenkins/.kube/config
-                        cd /tmp
-                        nohup kubectl port-forward --address 0.0.0.0 service/django-contact-service 8000:8000 -n default > /tmp/port-forward.log 2>&1 &
+                        # Create a script to run
+                        cat > /tmp/start-portforward.sh << 'EOF'
+        #!/bin/bash
+        export KUBECONFIG=/var/lib/jenkins/.kube/config
+        export PATH=/usr/local/bin:/usr/bin:/bin:$PATH
+        cd /tmp
+        nohup kubectl port-forward --address 0.0.0.0 service/django-contact-service 8000:8000 -n default > /tmp/port-forward.log 2>&1 &
+        EOF
                         
-                        # Disown the process (remove from Jenkins job control)
-                        disown
+                        chmod +x /tmp/start-portforward.sh
                         
-                        sleep 5
+                        # Run it with at (scheduled job) - this DEFINITELY survives
+                        echo "/tmp/start-portforward.sh" | at now + 1 minute
                         
-                        # Show it's running
-                        echo "✅ Port-forward started with PID:"
-                        pgrep -f "kubectl port-forward.*service"
-                        ps aux | grep port-forward | grep -v grep
+                        echo "✅ Port-forward scheduled to start in 1 minute"
+                        echo "Check with: atq"
+                        echo "View log: cat /tmp/port-forward.log"
                     '''
                 }
             }

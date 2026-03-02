@@ -787,6 +787,101 @@ fi
                 }
             }
         }
+        stage('DEBUG - Port Forwarding Investigation') {
+            steps {
+                script {
+                    sh '''
+                        echo "========== COMPLETE DEBUG INFORMATION =========="
+                        
+                        echo "=== 1. WHO AM I ==="
+                        whoami
+                        id
+                        echo "HOME: $HOME"
+                        echo "USER: $USER"
+                        
+                        echo -e "\n=== 2. KUBECTL CHECK ==="
+                        which kubectl || echo "kubectl not in PATH"
+                        kubectl version --short || echo "kubectl version failed"
+                        
+                        echo -e "\n=== 3. KUBECONFIG ==="
+                        echo "KUBECONFIG=$KUBECONFIG"
+                        ls -la /var/lib/jenkins/.kube/config || echo "No kubeconfig"
+                        ls -la ~/.kube/config || echo "No kubeconfig in home"
+                        
+                        echo -e "\n=== 4. CAN KUBECTL CONNECT? ==="
+                        kubectl get nodes || echo "Failed to get nodes"
+                        kubectl get pods -n default || echo "Failed to get pods"
+                        
+                        echo -e "\n=== 5. SERVICE DETAILS ==="
+                        kubectl get service django-contact-service -n default -o wide || echo "Service not found"
+                        
+                        echo -e "\n=== 6. POD DETAILS ==="
+                        kubectl get pods -n default -l app=django-contact-app || echo "No pods found"
+                        POD_NAME=$(kubectl get pods -n default -l app=django-contact-app -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+                        if [ -n "$POD_NAME" ]; then
+                            echo "Pod: $POD_NAME"
+                            kubectl get pod $POD_NAME -n default
+                            echo "Pod logs:"
+                            kubectl logs $POD_NAME -n default --tail=20
+                        fi
+                        
+                        echo -e "\n=== 7. PORT 8000 STATUS BEFORE ==="
+                        ss -tlnp | grep 8000 || echo "Port 8000 not in use"
+                        lsof -i :8000 || echo "No process on port 8000"
+                        
+                        echo -e "\n=== 8. TRY MANUAL PORT-FORWARD (10 seconds) ==="
+                        cd /tmp
+                        timeout 10 kubectl port-forward --address 0.0.0.0 service/django-contact-service 8000:8000 -n default &
+                        PF_PID=$!
+                        echo "Started with PID: $PF_PID"
+                        
+                        sleep 3
+                        echo "Process check after 3s:"
+                        ps -p $PF_PID || echo "Process died"
+                        
+                        sleep 3
+                        echo "Process check after 6s:"
+                        ps -p $PF_PID || echo "Process died"
+                        
+                        echo "Killing process..."
+                        kill $PF_PID 2>/dev/null || true
+                        
+                        echo -e "\n=== 9. PORT 8000 STATUS AFTER ==="
+                        ss -tlnp | grep 8000 || echo "Port 8000 free"
+                        
+                        echo -e "\n=== 10. TRY WITH POD DIRECTLY ==="
+                        if [ -n "$POD_NAME" ]; then
+                            timeout 10 kubectl port-forward --address 0.0.0.0 pod/$POD_NAME 8000:8000 -n default &
+                            PF_POD_PID=$!
+                            sleep 5
+                            ps -p $PF_POD_PID || echo "Pod port-forward died"
+                            kill $PF_POD_PID 2>/dev/null || true
+                        fi
+                        
+                        echo -e "\n=== 11. CHECK AZURE NSG (requires azure-cli) ==="
+                        if command -v az &> /dev/null; then
+                            az account show || echo "Not logged into Azure"
+                        else
+                            echo "azure-cli not installed"
+                        fi
+                        
+                        echo -e "\n=== 12. TEST NODEPORT ==="
+                        NODE_PORT=$(kubectl get service django-contact-service -n default -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null)
+                        if [ -n "$NODE_PORT" ]; then
+                            echo "NodePort is: $NODE_PORT"
+                            echo "Testing NodePort locally:"
+                            curl -I -s http://localhost:$NODE_PORT | head -1 || echo "NodePort local failed"
+                            echo "Testing NodePort via public IP:"
+                            curl -I -s http://51.103.56.25:$NODE_PORT | head -1 || echo "NodePort public failed"
+                        else
+                            echo "Could not get NodePort"
+                        fi
+                        
+                        echo -e "\n========== DEBUG COMPLETE =========="
+                    '''
+                }
+            }
+        }
         
     } 
     post {

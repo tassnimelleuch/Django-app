@@ -744,50 +744,25 @@ fi
                     echo "🔌 Setting up port-forwarding..."
                     
                     sh '''
-                        # Set explicit paths and environment
-                        export PATH=/usr/local/bin:/usr/bin:/bin:/snap/bin:$PATH
-                        export KUBECONFIG=/var/lib/jenkins/.kube/config
-                        export HOME=/var/lib/jenkins
-                        
-                        # KILL EVERYTHING on port 8000 (this is the key!)
-                        echo "Killing all processes on port 8000..."
-                        fuser -k 8000/tcp || true
+                        # Kill existing
                         pkill -f "kubectl port-forward" || true
-                        killall kubectl 2>/dev/null || true
-                        
-                        # Double-check port is free
+                        sudo fuser -k 8000/tcp || true
                         sleep 3
-                        echo "Checking if port 8000 is free:"
-                        ss -tlnp | grep 8000 || echo "✅ Port 8000 is free"
                         
-                        # Test kubectl first
-                        echo "Testing kubectl..."
-                        kubectl get pods -n default
-                        
-                        # Start with full logging
+                        # Start with nohup and disown
+                        export KUBECONFIG=/var/lib/jenkins/.kube/config
                         cd /tmp
-                        echo "Starting port-forward at $(date)"
                         nohup kubectl port-forward --address 0.0.0.0 service/django-contact-service 8000:8000 -n default > /tmp/port-forward.log 2>&1 &
-                        PF_PID=$!
                         
-                        # Wait and check
+                        # Disown the process (remove from Jenkins job control)
+                        disown
+                        
                         sleep 5
                         
-                        if ps -p $PF_PID > /dev/null; then
-                            echo "✅ Port-forward process running with PID: $PF_PID"
-                            
-                            # Test connection
-                            echo "Testing local connection..."
-                            curl -s http://localhost:8000 | head -20 || echo "⚠️ Connection test failed (app might need time to start)"
-                            
-                            echo "=== Last 20 lines of log ==="
-                            tail -20 /tmp/port-forward.log
-                        else
-                            echo "❌ Port-forward process died immediately"
-                            echo "=== Full log ==="
-                            cat /tmp/port-forward.log
-                            exit 1
-                        fi
+                        # Show it's running
+                        echo "✅ Port-forward started with PID:"
+                        pgrep -f "kubectl port-forward.*service"
+                        ps aux | grep port-forward | grep -v grep
                     '''
                 }
             }

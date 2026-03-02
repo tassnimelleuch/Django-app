@@ -738,6 +738,31 @@ fi
                 }
             }
         }
+        stage('Setup Port-Forwarding') {
+            steps {
+                script {
+                    echo "🔌 Setting up port-forwarding..."
+                    
+                    // Just kill existing and start new one - exactly like your manual commands
+                    sh '''
+                        # Kill any existing port-forward processes
+                        pkill -f "kubectl port-forward.*django-contact-service" || true
+                        
+                        # Start port-forward (runs as jenkins user)
+                        nohup kubectl port-forward --address 0.0.0.0 service/django-contact-service 8000:8000 -n default > port-forward.log 2>&1 &
+                        
+                        # Give it a moment to start
+                        sleep 3
+                        
+                        # Show that it's running
+                        echo "✅ Port-forwarding started:"
+                        ps aux | grep port-forward | grep -v grep
+                    '''
+                    
+                    echo "🌐 App available at: http://51.103.56.25:8000"
+                }
+            }
+        }
 
     } 
     post {

@@ -739,38 +739,54 @@ fi
             }
         }
         stage('Setup Port-Forwarding') {
-        steps {
-            script {
-                echo "🔌 Setting up port-forwarding..."
-                
-                sh '''
-                    # Kill any existing
-                    pkill -f "kubectl port-forward" || true
-                    sleep 2
+            steps {
+                script {
+                    echo "🔌 Setting up port-forwarding..."
                     
-                    # Start port-forward to SERVICE (more stable)
-                    cd /tmp
-                    nohup kubectl port-forward --address 0.0.0.0 service/django-contact-service 8000:8000 -n default > /tmp/port-forward.log 2>&1 &
-                    
-                    # Wait and verify
-                    sleep 5
-                    
-                    if pgrep -f "kubectl port-forward.*service" > /dev/null; then
-                        echo "✅ Port-forward started successfully"
-                    else
-                        echo "❌ Port-forward failed to start"
-                        echo "=== LOGS ==="
-                        cat /tmp/port-forward.log
-                        exit 1
-                    fi
-                    
-                    # Test the connection
-                    echo "Testing connection..."
-                    curl -s localhost:8000 || echo "⚠️ Connection test failed"
-                '''
+                    sh '''
+                        # Set explicit paths and environment
+                        export PATH=/usr/local/bin:/usr/bin:/bin:/snap/bin:$PATH
+                        export KUBECONFIG=/var/lib/jenkins/.kube/config
+                        export HOME=/var/lib/jenkins
+                        
+                        # Kill any existing
+                        pkill -f "kubectl port-forward" || true
+                        sleep 3
+                        
+                        # Test kubectl first
+                        echo "Testing kubectl..."
+                        kubectl get pods -n default
+                        
+                        # Start with full logging
+                        cd /tmp
+                        echo "Starting port-forward at $(date)"
+                        nohup kubectl port-forward --address 0.0.0.0 service/django-contact-service 8000:8000 -n default > /tmp/port-forward.log 2>&1 &
+                        PF_PID=$!
+                        
+                        # Wait and check
+                        sleep 10
+                        
+                        if ps -p $PF_PID > /dev/null; then
+                            echo "✅ Port-forward process running with PID: $PF_PID"
+                            echo "Process details:"
+                            ps -f $PF_PID
+                            
+                            # Test connection
+                            echo "Testing local connection..."
+                            curl -v http://localhost:8000 || echo "Connection test failed"
+                            
+                            echo "=== Last 20 lines of log ==="
+                            tail -20 /tmp/port-forward.log
+                        else
+                            echo "❌ Port-forward process died immediately"
+                            echo "=== Full log ==="
+                            cat /tmp/port-forward.log
+                            exit 1
+                        fi
+                    '''
+                }
             }
         }
-    }
         
     } 
     post {

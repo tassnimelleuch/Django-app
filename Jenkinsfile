@@ -713,6 +713,25 @@ fi
                 }
             }
         }
+        stage('Restart Port Forward') {
+            steps {
+                script {
+                    echo "🔄 Restarting port-forward service..."
+                    sh '''
+                        sudo systemctl restart kubectl-port-forward
+                        sleep 5
+                        
+                        if systemctl is-active --quiet kubectl-port-forward; then
+                            echo "✅ Port-forward service is running"
+                        else
+                            echo "❌ Port-forward service failed to start!"
+                            sudo journalctl -u kubectl-port-forward --no-pager -n 20
+                            exit 1
+                        fi
+                    '''
+                }
+            }
+        }
         stage('Rollback on Failure') {
             when {
                 expression { currentBuild.result == 'FAILURE' }

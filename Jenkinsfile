@@ -684,31 +684,45 @@ fi
                     echo "🔍 Verifying AKS deployment..."
                     
                     sh '''
-                        # Get the CURRENT running pod (not a hardcoded one)
-                        POD_NAME=$(kubectl get pods -n default -l app=django-contact-app --field-selector status.phase=Running -o jsonpath='{.items[0].metadata.name}')
+                        # Wait for old pods to terminate first
+                        sleep 10
+                        
+                        # Get the NEWEST running pod (sorted by creation time)
+                        POD_NAME=$(kubectl get pods -n default \
+                            -l app=django-contact-app \
+                            --sort-by=.metadata.creationTimestamp \
+                            -o jsonpath='{.items[-1].metadata.name}')
                         
                         if [ -z "$POD_NAME" ]; then
-                            echo "❌ No running pod found!"
+                            echo "❌ No pod found!"
                             exit 1
                         fi
                         
-                        echo "📦 Current running pod: $POD_NAME"
+                        echo "📦 Latest pod: $POD_NAME"
                         
-                        # Check pod status
-                        POD_STATUS=$(kubectl get pod $POD_NAME -n default -o jsonpath='{.status.phase}')
-                        echo "📊 Pod status: $POD_STATUS"
-                        
-                        if [ "$POD_STATUS" = "Running" ]; then
-                            echo "✅ Pod is running"
+                        # Wait until it's actually Running (up to 120s)
+                        echo "⏳ Waiting for pod to reach Running state..."
+                        for i in $(seq 1 24); do
+                            POD_STATUS=$(kubectl get pod $POD_NAME -n default -o jsonpath='{.status.phase}')
+                            echo "   Attempt $i/24 - Status: $POD_STATUS"
                             
-                            # Show recent logs
-                            echo "📋 Recent logs:"
-                            kubectl logs $POD_NAME -n default --tail=20
-                        else
-                            echo "❌ Pod is not running!"
-                            kubectl describe pod $POD_NAME -n default
-                            exit 1
-                        fi
+                            if [ "$POD_STATUS" = "Running" ]; then
+                                echo "✅ Pod is Running!"
+                                break
+                            fi
+                            
+                            if [ $i -eq 24 ]; then
+                                echo "❌ Pod never reached Running state!"
+                                kubectl describe pod $POD_NAME -n default
+                                exit 1
+                            fi
+                            
+                            sleep 5
+                        done
+                        
+                        # Show recent logs
+                        echo "📋 Recent logs:"
+                        kubectl logs $POD_NAME -n default --tail=20
                     '''
                 }
             }

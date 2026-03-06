@@ -37,16 +37,12 @@ pipeline {
         GITHUB_OWNER = 'tassnimelleuch'
         SONAR_PROJECT_KEY = 'tassnimelleuch_Django-app'
         
-        // ===== AZURE AKS CONFIGURATION - UPDATED TO MATCH YOUR CLUSTER =====
+        // ===== AZURE AKS CONFIGURATION =====
         AZURE_RESOURCE_GROUP = 'aks-deployment'    
         AKS_CLUSTER_NAME = 'django-app'                   
         K8S_NAMESPACE = 'default'
         K8S_DEPLOYMENT = 'django-contact-app'
         K8S_SERVICE = 'django-contact-service'
-        
-        // ===== MINIKUBE CONFIGURATION (KEPT FOR REFERENCE) =====
-        // MINIKUBE_HOME = '/var/lib/jenkins'
-        // MINIKUBE_KUBECONFIG = '/var/lib/jenkins/.kube/config'
     }
     
     stages {
@@ -202,7 +198,7 @@ if grep -i "sonarcloud" full-response.json > /dev/null; then
             echo "✅✅✅ QUALITY GATE PASSED! ✅✅✅"
             ;;
         "failure")
-            echo "QUALITY GATE FAILED! "
+            echo "QUALITY GATE FAILED!"
             exit 1
             ;;
         *)
@@ -336,7 +332,7 @@ fi
         }
         
         // ===================================================================
-        // MINIKUBE DEPLOYMENT STAGES 
+        // MINIKUBE DEPLOYMENT STAGES
         // ===================================================================
         
         stage('Setup Minikube Access') {
@@ -381,7 +377,6 @@ fi
                     sh '''
                         export KUBECONFIG=/var/lib/jenkins/.kube/config
                         
-                        # Function to apply with retry
                         apply_with_retry() {
                             local file=$1
                             local name=$2
@@ -428,7 +423,6 @@ fi
                     sh '''
                         export KUBECONFIG=/var/lib/jenkins/.kube/config
                         
-                        # Show pod status during wait
                         kubectl get pods -w &
                         WATCH_PID=$!
                         
@@ -460,7 +454,7 @@ fi
                 }
             }
         }
-
+    
         stage('Verify Deployment') {
             steps {
                 script {
@@ -469,20 +463,15 @@ fi
                     sh '''
                         export KUBECONFIG=/var/lib/jenkins/.kube/config
                         
-                        # Attendre que l'ancien pod soit complètement parti
                         echo "⏳ Waiting for old pods to terminate..."
                         sleep 10
                         
-                        # Récupérer le pod le PLUS RÉCENT (Running uniquement)
                         echo "🔍 Looking for the newest running pod..."
-                        
-                        # Méthode 1: Trier par date de création et prendre le plus récent
                         POD_NAME=$(kubectl get pods -l app=django-contact-app \
                             --field-selector=status.phase=Running \
                             --sort-by=.metadata.creationTimestamp \
                             -o jsonpath='{.items[-1].metadata.name}' 2>/dev/null)
                         
-                        # Si aucun pod trouvé, essayer avec un selecteur plus large
                         if [ -z "$POD_NAME" ]; then
                             echo "⚠️ No running pod found with field selector, trying all pods..."
                             POD_NAME=$(kubectl get pods -l app=django-contact-app \
@@ -498,52 +487,35 @@ fi
                         
                         echo "📦 Latest pod: $POD_NAME"
                         
-                        # Vérifier le statut du pod
                         POD_STATUS=$(kubectl get pod $POD_NAME -o jsonpath='{.status.phase}')
                         echo "📊 Pod status: $POD_STATUS"
                         
-                        # Attendre que le pod soit vraiment prêt (jusqu'à 120s)
                         echo "⏳ Waiting for pod to be ready (this may take a moment)..."
-                        
-                        # Attendre la condition ready
                         if kubectl wait --for=condition=ready pod/$POD_NAME --timeout=120s; then
                             echo "✅ Pod is ready!"
                         else
                             echo "❌ Pod failed to become ready within timeout"
-                            
-                            # Debug: Décrire le pod
                             echo "📋 Pod details:"
                             kubectl describe pod $POD_NAME
-                            
-                            # Vérifier les logs des conteneurs d'init
                             echo "📋 Init container logs (fix-permissions):"
                             kubectl logs $POD_NAME -c fix-permissions 2>/dev/null || echo "No fix-permissions logs"
-                            
                             echo "📋 Init container logs (migrate):"
                             kubectl logs $POD_NAME -c migrate 2>/dev/null || echo "No migrate logs"
-                            
-                            # Vérifier les events récents
                             echo "📋 Recent events:"
                             kubectl get events --field-selector involvedObject.name=$POD_NAME --all-namespaces 2>/dev/null | tail -10 || echo "No events"
-                            
                             exit 1
                         fi
                         
-                        # Afficher les logs récents
                         echo "📋 Recent logs from main container:"
                         kubectl logs $POD_NAME --tail=20 2>/dev/null || echo "No logs available"
                         
-                        # Obtenir l'URL du service
                         echo "🌐 Getting service URL..."
                         MINIKUBE_URL=$(minikube service django-contact-service --url 2>/dev/null || echo "")
                         
                         if [ -n "$MINIKUBE_URL" ]; then
                             echo "✅ Application is accessible at: $MINIKUBE_URL"
                             
-                            # Tester l'endpoint
                             echo "🔍 Testing application endpoint..."
-                            
-                            # Attendre que l'application soit prête à répondre
                             sleep 5
                             
                             HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 $MINIKUBE_URL || echo "Failed")
@@ -557,15 +529,11 @@ fi
                             echo "🔗 Try accessing: $MINIKUBE_URL"
                         else
                             echo "⚠️ Could not get Minikube URL"
-                            
-                            # Alternative: Vérifier via port-forward
                             echo "🔄 Attempting port-forward as alternative..."
                             kubectl port-forward pod/$POD_NAME 8000:8000 --timeout=5s &
                             PF_PID=$!
                             sleep 3
-                            
                             curl -s -o /dev/null -w "%{http_code}" http://localhost:8000 || echo "Port-forward test failed"
-                            
                             kill $PF_PID 2>/dev/null || true
                         fi
                         
@@ -574,8 +542,9 @@ fi
                 }
             }
         }
-        }
 
+        // BUG FIX: This stage was placed OUTSIDE the stages{} block in the original.
+        // It must be the last stage inside stages{} to run on pipeline failure.
         stage('Rollback on Failure') {
             when {
                 expression { currentBuild.result == 'FAILURE' }
@@ -600,7 +569,6 @@ fi
                 }
             }
         }
-        
         
         // ===================================================================
         // AZURE AKS DEPLOYMENT STAGES 
@@ -631,7 +599,7 @@ fi
                     echo "🚀 Deploying to Azure Kubernetes Service..."
                     
                     sh '''
-                        # Function to apply with retry
+                        // Function to apply with retry
                         apply_with_retry() {
                             local file=$1
                             local name=$2
@@ -657,16 +625,16 @@ fi
                             return 1
                         }
                         
-                        # Create namespace if it doesn't exist
+                        // Create namespace if it doesn't exist
                         kubectl create namespace ${K8S_NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
                         
-                        # Apply secrets first (if they exist)
+                        // Apply secrets first (if they exist)
                         if [ -f k8s/secret.yaml ]; then
                             echo "📄 Applying secrets..."
                             kubectl apply -f k8s/secret.yaml --namespace ${K8S_NAMESPACE}
                         fi
                         
-                        # Apply PVC (persistent storage)
+                        // Apply PVC (persistent storage)
                         echo "📄 Applying PVC (10Mi)..."
                         if [ -f k8s/pvc.yaml ]; then
                             apply_with_retry "k8s/pvc.yaml" "PVC" || exit 1
@@ -674,11 +642,11 @@ fi
                             echo "⚠️ PVC file not found, skipping..."
                         fi
                         
-                        # Apply deployment
+                        // Apply deployment
                         echo "📄 Applying deployment with image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
                         apply_with_retry "k8s/deployment.yaml" "Deployment" || exit 1
                         
-                        # Apply service (NodePort - free!)
+                        // Apply service (NodePort - free!)
                         echo "📄 Applying service (NodePort - no extra cost)..."
                         if [ -f k8s/service.yaml ]; then
                             apply_with_retry "k8s/service.yaml" "Service" || exit 1
@@ -688,7 +656,7 @@ fi
                         
                         echo "✅ All Kubernetes resources applied successfully"
                         
-                        # Show current resources
+                        // Show current resources
                         echo "📊 Current pods:"
                         kubectl get pods -n ${K8S_NAMESPACE} -l app=django-contact-app
                         
@@ -705,7 +673,7 @@ fi
                     echo "⏳ Waiting for AKS deployment to be ready..."
                     
                     sh '''
-                        # Show pod status during wait
+                        // Show pod status during wait
                         kubectl get pods -n ${K8S_NAMESPACE} -l app=django-contact-app -w &
                         WATCH_PID=$!
                         
@@ -717,7 +685,7 @@ fi
                             kill $WATCH_PID 2>/dev/null || true
                             echo "❌ Deployment rollout failed"
                             
-                            # Debug information
+                            // Debug information
                             POD_NAME=$(kubectl get pods -n ${K8S_NAMESPACE} -l app=django-contact-app -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
                             if [ -n "$POD_NAME" ]; then
                                 echo "📋 Pod events:"
@@ -739,10 +707,10 @@ fi
                     echo "🔍 Verifying AKS deployment..."
                     
                     sh '''
-                        # Wait for old pods to terminate first
+                        // Wait for old pods to terminate first
                         sleep 10
                         
-                        # Get the NEWEST running pod (sorted by creation time)
+                        // Get the NEWEST running pod (sorted by creation time)
                         POD_NAME=$(kubectl get pods -n default \
                             -l app=django-contact-app \
                             --sort-by=.metadata.creationTimestamp \
@@ -755,7 +723,7 @@ fi
                         
                         echo "📦 Latest pod: $POD_NAME"
                         
-                        # Wait until it's actually Running (up to 120s)
+                        // Wait until it's actually Running (up to 120s)
                         echo "⏳ Waiting for pod to reach Running state..."
                         for i in $(seq 1 24); do
                             POD_STATUS=$(kubectl get pod $POD_NAME -n default -o jsonpath='{.status.phase}')
@@ -775,7 +743,7 @@ fi
                             sleep 5
                         done
                         
-                        # Show recent logs
+                        // Show recent logs
                         echo "📋 Recent logs:"
                         kubectl logs $POD_NAME -n default --tail=20
                     '''
@@ -813,12 +781,12 @@ fi
                         echo "Undoing deployment..."
                         kubectl rollout undo deployment/${K8S_DEPLOYMENT} --namespace ${K8S_NAMESPACE}
                         
-                  <      echo "Waiting for rollback..."
+                        echo "Waiting for rollback..."
                         kubectl rollout status deployment/${K8S_DEPLOYMENT} --namespace ${K8S_NAMESPACE} --timeout=60s
                         
                         echo "✅ Rollback completed"
                         
-                        # Show current pods after rollback
+                        // Show current pods after rollback
                         kubectl get pods -n ${K8S_NAMESPACE} -l app=django-contact-app
                     '''
                     
@@ -826,7 +794,9 @@ fi
                 }
             }
         }*/
-    }
+
+    } // end stages
+
     post {
         always {
             archiveArtifacts artifacts: 'coverage.xml, junit-results.xml, pylint-report.json, sonar-check.json', allowEmptyArchive: true
@@ -845,10 +815,8 @@ fi
             echo "🐳 Docker image: ${env.DOCKER_IMAGE_NAME}:${env.DOCKER_IMAGE_TAG}"
             
             script {
-                // Your VM's public IP (hardcoded since it's static)
                 def VM_PUBLIC_IP = "51.103.56.25"
                 
-                // Get the NodePort
                 def NODE_PORT = sh(
                     script: "kubectl get service ${K8S_SERVICE} -n ${K8S_NAMESPACE} -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo '30000'",
                     returnStdout: true
@@ -868,18 +836,6 @@ fi
                 echo "📊 View on Docker Hub: https://hub.docker.com/r/${env.DOCKER_IMAGE_NAME}/tags"
                 echo "📊 View on SonarCloud: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
             }
-
-            
-            // MINIKUBE URL (KEPT FOR REFERENCE)
-            /*
-            script {
-                def SERVICE_URL = sh(
-                    script: "minikube service ${K8S_SERVICE} --url || echo 'Service not available'",
-                    returnStdout: true
-                ).trim()
-                echo "🌐 Access your app at: ${SERVICE_URL}"
-            }
-            */
         }
         
         failure {

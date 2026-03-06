@@ -469,56 +469,111 @@ fi
                     sh '''
                         export KUBECONFIG=/var/lib/jenkins/.kube/config
                         
-                        # Get pod name
-                        POD_NAME=$(kubectl get pods -l app=django-contact-app -o jsonpath='{.items[0].metadata.name}')
-                        echo "📦 Pod: $POD_NAME"
+                        # Attendre que l'ancien pod soit complètement parti
+                        echo "⏳ Waiting for old pods to terminate..."
+                        sleep 10
                         
-                        # Wait for pod to be fully ready
-                        echo "Waiting for pod to be ready..."
-                        kubectl wait --for=condition=ready pod/$POD_NAME --timeout=60s || {
-                            echo "❌ Pod not ready"
-                            kubectl describe pod $POD_NAME
+                        # Récupérer le pod le PLUS RÉCENT (Running uniquement)
+                        echo "🔍 Looking for the newest running pod..."
+                        
+                        # Méthode 1: Trier par date de création et prendre le plus récent
+                        POD_NAME=$(kubectl get pods -l app=django-contact-app \
+                            --field-selector=status.phase=Running \
+                            --sort-by=.metadata.creationTimestamp \
+                            -o jsonpath='{.items[-1].metadata.name}' 2>/dev/null)
+                        
+                        # Si aucun pod trouvé, essayer avec un selecteur plus large
+                        if [ -z "$POD_NAME" ]; then
+                            echo "⚠️ No running pod found with field selector, trying all pods..."
+                            POD_NAME=$(kubectl get pods -l app=django-contact-app \
+                                --sort-by=.metadata.creationTimestamp \
+                                -o jsonpath='{.items[-1].metadata.name}' 2>/dev/null)
+                        fi
+                        
+                        if [ -z "$POD_NAME" ]; then
+                            echo "❌ No pod found!"
+                            kubectl get pods -l app=django-contact-app
                             exit 1
-                        }
+                        fi
                         
-                        # Check pod status
+                        echo "📦 Latest pod: $POD_NAME"
+                        
+                        # Vérifier le statut du pod
                         POD_STATUS=$(kubectl get pod $POD_NAME -o jsonpath='{.status.phase}')
                         echo "📊 Pod status: $POD_STATUS"
                         
-                        if [ "$POD_STATUS" = "Running" ]; then
-                            echo "✅ Pod is running"
+                        # Attendre que le pod soit vraiment prêt (jusqu'à 120s)
+                        echo "⏳ Waiting for pod to be ready (this may take a moment)..."
+                        
+                        # Attendre la condition ready
+                        if kubectl wait --for=condition=ready pod/$POD_NAME --timeout=120s; then
+                            echo "✅ Pod is ready!"
+                        else
+                            echo "❌ Pod failed to become ready within timeout"
                             
-                            # Check initContainers logs
-                            echo "📋 fix-permissions logs:"
+                            # Debug: Décrire le pod
+                            echo "📋 Pod details:"
+                            kubectl describe pod $POD_NAME
+                            
+                            # Vérifier les logs des conteneurs d'init
+                            echo "📋 Init container logs (fix-permissions):"
                             kubectl logs $POD_NAME -c fix-permissions 2>/dev/null || echo "No fix-permissions logs"
                             
-                            echo "📋 migrate logs:"
+                            echo "📋 Init container logs (migrate):"
                             kubectl logs $POD_NAME -c migrate 2>/dev/null || echo "No migrate logs"
                             
-                            echo "📋 Main container logs:"
-                            kubectl logs $POD_NAME --tail=20 2>/dev/null || echo "No main container logs"
-                        else
-                            echo "❌ Pod is not running! Status: $POD_STATUS"
-                            kubectl describe pod $POD_NAME
+                            # Vérifier les events récents
+                            echo "📋 Recent events:"
+                            kubectl get events --field-selector involvedObject.name=$POD_NAME --all-namespaces 2>/dev/null | tail -10 || echo "No events"
+                            
                             exit 1
                         fi
                         
-                        # Get service URL using minikube
+                        # Afficher les logs récents
+                        echo "📋 Recent logs from main container:"
+                        kubectl logs $POD_NAME --tail=20 2>/dev/null || echo "No logs available"
+                        
+                        # Obtenir l'URL du service
                         echo "🌐 Getting service URL..."
                         MINIKUBE_URL=$(minikube service django-contact-service --url 2>/dev/null || echo "")
+                        
                         if [ -n "$MINIKUBE_URL" ]; then
                             echo "✅ Application is accessible at: $MINIKUBE_URL"
                             
-                            # Test the endpoint
-                            echo "Testing application endpoint..."
-                            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" $MINIKUBE_URL || echo "Failed")
-                            echo "HTTP Status: $HTTP_CODE"
+                            # Tester l'endpoint
+                            echo "🔍 Testing application endpoint..."
+                            
+                            # Attendre que l'application soit prête à répondre
+                            sleep 5
+                            
+                            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 $MINIKUBE_URL || echo "Failed")
+                            
+                            if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "302" ] || [ "$HTTP_CODE" = "301" ]; then
+                                echo "✅ Application responded with HTTP $HTTP_CODE"
+                            else
+                                echo "⚠️ Application returned HTTP $HTTP_CODE - may need investigation"
+                            fi
+                            
+                            echo "🔗 Try accessing: $MINIKUBE_URL"
                         else
                             echo "⚠️ Could not get Minikube URL"
+                            
+                            # Alternative: Vérifier via port-forward
+                            echo "🔄 Attempting port-forward as alternative..."
+                            kubectl port-forward pod/$POD_NAME 8000:8000 --timeout=5s &
+                            PF_PID=$!
+                            sleep 3
+                            
+                            curl -s -o /dev/null -w "%{http_code}" http://localhost:8000 || echo "Port-forward test failed"
+                            
+                            kill $PF_PID 2>/dev/null || true
                         fi
+                        
+                        echo "✅ Verification complete"
                     '''
                 }
             }
+        }
         }
 
         stage('Rollback on Failure') {

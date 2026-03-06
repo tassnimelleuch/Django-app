@@ -336,9 +336,9 @@ fi
         }
         
         // ===================================================================
-        // MINIKUBE DEPLOYMENT STAGES (KEPT FOR REFERENCE - DO NOT DELETE)
+        // MINIKUBE DEPLOYMENT STAGES 
         // ===================================================================
-        /*
+        
         stage('Setup Minikube Access') {
             steps {
                 script {
@@ -545,12 +545,12 @@ fi
                 }
             }
         }
-        */
+        
         
         // ===================================================================
         // AZURE AKS DEPLOYMENT STAGES 
         // ===================================================================
- 
+        /*
 
         
         stage('Prepare Kubernetes Manifests') {
@@ -758,7 +758,7 @@ fi
                         echo "Undoing deployment..."
                         kubectl rollout undo deployment/${K8S_DEPLOYMENT} --namespace ${K8S_NAMESPACE}
                         
-                        echo "Waiting for rollback..."
+                  <      echo "Waiting for rollback..."
                         kubectl rollout status deployment/${K8S_DEPLOYMENT} --namespace ${K8S_NAMESPACE} --timeout=60s
                         
                         echo "✅ Rollback completed"
@@ -770,7 +770,7 @@ fi
                     echo "✅ Rollback finished"
                 }
             }
-        }
+        }*/
     }
     post {
         always {

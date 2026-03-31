@@ -334,7 +334,7 @@ fi
         // ===================================================================
         // MINIKUBE DEPLOYMENT STAGES
         // ===================================================================
-        
+        /*
         stage('Setup Minikube Access') {
             steps {
                 script {
@@ -568,12 +568,12 @@ fi
                     echo "✅ Rollback finished"
                 }
             }
-        }
+        } */
         
         // ===================================================================
         // AZURE AKS DEPLOYMENT STAGES 
         // ===================================================================
-        /*
+        
 
         
         stage('Prepare Kubernetes Manifests') {
@@ -793,7 +793,7 @@ fi
                     echo "✅ Rollback finished"
                 }
             }
-        }*/
+        }
 
     } // end stages
 

@@ -7,6 +7,6 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 50Mi #50 minikube 10 azure
-  storageClassName: standard  # from "standard" minikube to "managed-csi" azure
+      storage: 10Mi #50 minikube 10 azure
+  storageClassName: managed-csi # from "standard" minikube to "managed-csi" azure
   #test

@@ -3,6 +3,7 @@
 # metadata:
  #  name: django-contact-app
 #  spec:
+    #revisionHistoryLimit: 2
  #  replicas: 1
  #  selector:
  #    matchLabels:
@@ -104,6 +105,7 @@ kind: Deployment
 metadata:
   name: django-contact-app
 spec:
+  revisionHistoryLimit: 2
   replicas: 1
   selector:
     matchLabels:

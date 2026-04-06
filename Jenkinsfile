@@ -670,7 +670,7 @@ fi
         stage('Wait for AKS Rollout') {
             steps {
                 script {
-                    echo "⏳ Waiting for AKS deployment to be ready..."
+                    echo "⏳ Waiting for AKS deployment to be ready"
                     
                     sh '''
                         # Show pod status during wait

@@ -46,7 +46,6 @@
         <div style="margin-top: 15px;">
             <a href="{% url 'edit_contact' contact.id %}" class="btn">✏️ Edit</a>
 
-            <!-- ✅ FIXED DELETE -->
             <form method="post" action="{% url 'delete_contact' contact.id %}">
                 {% csrf_token %}
                 <button type="submit"

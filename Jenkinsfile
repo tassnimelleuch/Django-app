@@ -635,7 +635,7 @@ fi
                         fi
                         
                         # Apply PVC (persistent storage)
-                        echo "📄 Applying PVC (10Mi)..."
+                        echo " Applying PVC (10Mi)..."
                         if [ -f k8s/pvc.yaml ]; then
                             apply_with_retry "k8s/pvc.yaml" "PVC" || exit 1
                         else

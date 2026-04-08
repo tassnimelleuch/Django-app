@@ -647,7 +647,7 @@ fi
                         apply_with_retry "k8s/deployment.yaml" "Deployment" || exit 1
                         
                         # Apply service (NodePort - free!)
-                        echo "📄 Applying service (NodePort - no extra cost)..."
+                        echo "Applying service (NodePort - no extra cost)..."
                         if [ -f k8s/service.yaml ]; then
                             apply_with_retry "k8s/service.yaml" "Service" || exit 1
                         else

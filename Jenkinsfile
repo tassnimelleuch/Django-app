@@ -630,7 +630,7 @@ fi
                         
                         # Apply secrets first (if they exist)
                         if [ -f k8s/secret.yaml ]; then
-                            echo "📄 Applying secrets"
+                            echo "Applying secrets"
                             kubectl apply -f k8s/secret.yaml --namespace ${K8S_NAMESPACE}
                         fi
                         

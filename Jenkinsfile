@@ -643,7 +643,7 @@ fi
                         fi
                         
                         # Apply deployment
-                        echo "📄 Applying deployment with image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
+                        echo "Applying deployment with image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
                         apply_with_retry "k8s/deployment.yaml" "Deployment" || exit 1
                         
                         # Apply service (NodePort - free!)

@@ -621,7 +621,7 @@ fi
                                 fi
                             done
                             
-                            echo "❌ Failed to apply $name after $max_retries attempts"
+                            echo "Failed to apply $name after $max_retries attempts"
                             return 1
                         }
                         

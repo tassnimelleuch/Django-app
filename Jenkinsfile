@@ -639,7 +639,7 @@ fi
                         if [ -f k8s/pvc.yaml ]; then
                             apply_with_retry "k8s/pvc.yaml" "PVC" || exit 1
                         else
-                            echo "⚠️ PVC file not found, skipping..."
+                            echo " PVC file not found, skipping..."
                         fi
                         
                         # Apply deployment

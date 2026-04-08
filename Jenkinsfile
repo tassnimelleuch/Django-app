@@ -660,7 +660,7 @@ fi
                         echo "📊 Current pods:"
                         kubectl get pods -n ${K8S_NAMESPACE} -l app=django-contact-app
                         
-                        echo "📊 Current services:"
+                        echo "Current services:"
                         kubectl get services -n ${K8S_NAMESPACE}
                     '''
                 }

@@ -18,6 +18,7 @@ def dashboard(request):
 
 
 # UNSAFE METHODS - All POST-only views have CSRF protection via global middleware
+@login_required
 @require_http_methods(['POST'])
 @csrf_protect
 def user_logout(request):
@@ -186,6 +187,7 @@ def edit_phone(request, phone_id):
 
 @login_required
 @require_http_methods(["GET", "POST"])
+@csrf_protect
 def delete_phone(request, phone_id):
     """
     GET: Show confirmation page.

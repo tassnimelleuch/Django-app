@@ -18,5 +18,5 @@ urlpatterns = [
     path('phone/<int:phone_id>/delete/', views.delete_phone, name='delete_phone'),
 
 
-    #password = '1234' 
+    
 ]

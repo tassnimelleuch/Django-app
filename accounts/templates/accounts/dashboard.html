@@ -6,7 +6,7 @@
         body { font-family: Arial; padding: 20px; }
         .welcome { color: green; font-size: 24px; }
         .menu { margin-top: 30px; }
-        .menu a { margin-right: 20px; padding: 10px; background: #4CAF50; color: white; text-decoration: none; }
+        .menu a { margin-right: 20px; padding: 10px; background: #2E7D32; color: white; text-decoration: none; }
         .logout-btn {
         background: linear-gradient(135deg, #ff5252, #e53935);
         color: white;
@@ -46,7 +46,7 @@
     </div>
 <div class="menu">
     <a href="{% url 'contact_list' %}" style="background: #2196F3;">📇 View Contacts</a>
-    <a href="{% url 'add_contact' %}" style="background: #4CAF50;">➕ Add New Contact</a>
+    <a href="{% url 'add_contact' %}" style="background: #2E7D32;">➕ Add New Contact</a>
 <form method="post" action="{% url 'logout' %}" style="margin-left: 15px; display: inline-block;">
     {% csrf_token %}
     <button type="submit" class="logout-btn">🚪 Logout</button>

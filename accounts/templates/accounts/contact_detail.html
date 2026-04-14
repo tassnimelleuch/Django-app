@@ -7,7 +7,7 @@
         .contact-header { background: #f0f8ff; padding: 20px; border-radius: 5px; }
         .section { margin: 30px 0; }
         .btn {
-            background: #4CAF50;
+            background: #2E7D32;
             color: white;
             padding: 8px 15px;
             text-decoration: none;
@@ -20,7 +20,7 @@
         .btn-danger { background: #f44336; }
         .phone-badge, .address-card { 
             background: #e8f5e8; padding: 10px; margin: 5px 0; 
-            border-left: 3px solid #4CAF50;
+            border-left: 3px solid #2E7D32;
         }
         form { display: inline; }
     </style>
@@ -66,7 +66,7 @@
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <span>📱 {{ phone.get_phone_type_display }}: {{ phone.number }}</span>
                         <div>
-                            <a href="{% url 'edit_phone' phone.id %}" style="color: #4CAF50; text-decoration: none; margin-right: 10px;">✏️</a>
+                            <a href="{% url 'edit_phone' phone.id %}" style="color: #2E7D32; text-decoration: none; margin-right: 10px;">✏️</a>
                             <a href="{% url 'delete_phone' phone.id %}" style="color: #f44336; text-decoration: none;">🗑️</a>
                         </div>
                     </div>

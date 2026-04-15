@@ -796,32 +796,31 @@ fi
         }
 
     } // end stages
-
     post {
         always {
             archiveArtifacts artifacts: 'coverage.xml, junit-results.xml, pylint-report.json, sonar-check.json', allowEmptyArchive: true
-            
+
             sh '''
                 rm -rf ${VENV_DIR} || true
                 rm -f coverage.xml junit-results.xml pylint-report.json sonar-check.json init_django.py check-sonarcloud.sh full-response.json sonarcloud-status.txt || true
             '''
-            
+
             echo "✅ Pipeline execution completed"
         }
-        
+
         success {
             echo "✅✅✅ PIPELINE SUCCESSFUL! ✅✅✅"
             echo "📅 Build: ${HUMAN_READABLE_DATE} (#${BUILD_NUMBER})"
             echo "🐳 Docker image: ${env.DOCKER_IMAGE_NAME}:${env.DOCKER_IMAGE_TAG}"
-            
+
             script {
                 def VM_PUBLIC_IP = "51.103.56.25"
-                
+
                 def NODE_PORT = sh(
                     script: "kubectl get service ${K8S_SERVICE} -n ${K8S_NAMESPACE} -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo '30000'",
                     returnStdout: true
                 ).trim()
-                
+
                 echo "🌐🌐🌐 ACCESS YOUR APP HERE: http://${VM_PUBLIC_IP}:8000 🌐🌐🌐"
                 echo ""
                 echo "📱 Quick Access Links:"
@@ -837,11 +836,47 @@ fi
                 echo "📊 View on SonarCloud: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
             }
         }
-        
+
         failure {
             echo "❌❌❌ PIPELINE FAILED ❌❌❌"
             echo "📅 Build: ${HUMAN_READABLE_DATE} (#${BUILD_NUMBER})"
             echo "📊 SonarCloud results: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
+
+            emailext(
+                to: 'your@email.com',
+                subject: "❌ Jenkins FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                body: """
+    Build failed.
+
+    Job: ${env.JOB_NAME}
+    Build number: ${env.BUILD_NUMBER}
+    Build URL: ${env.BUILD_URL}
+    Date: ${HUMAN_READABLE_DATE}
+
+    SonarCloud:
+    https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}
+    """
+            )
+        }
+
+        fixed {
+            emailext(
+                to: 'your@email.com',
+                subject: "✅ Jenkins FIXED: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                body: """
+    The pipeline is successful again after previous failure(s).
+
+    Job: ${env.JOB_NAME}
+    Build number: ${env.BUILD_NUMBER}
+    Build URL: ${env.BUILD_URL}
+    Date: ${HUMAN_READABLE_DATE}
+
+    Docker image:
+    ${env.DOCKER_IMAGE_NAME}:${env.DOCKER_IMAGE_TAG}
+
+    SonarCloud:
+    https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}
+    """
+            )
         }
     }
-}

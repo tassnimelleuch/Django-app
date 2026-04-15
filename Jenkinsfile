@@ -838,44 +838,48 @@ fi
         }
 
         failure {
-            echo "❌❌❌ PIPELINE FAILED ❌❌❌"
-            echo "📅 Build: ${HUMAN_READABLE_DATE} (#${BUILD_NUMBER})"
-            echo "📊 SonarCloud results: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
+            script {
+                def COMMITTER_EMAIL = sh(
+                    script: "git log -1 --pretty=format:'%ae'",
+                    returnStdout: true
+                ).trim()
+                
+                emailext(
+                    to: "${COMMITTER_EMAIL}",
+                    subject: "❌ Jenkins FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                    body: """
+        Build failed.
 
-            emailext(
-                to: 'tasnim.eleuch@enis.tn',
-                subject: "❌ Jenkins FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                body: """
-    Build failed.
-
-    Job: ${env.JOB_NAME}
-    Build number: ${env.BUILD_NUMBER}
-    Build URL: ${env.BUILD_URL}
-    Date: ${HUMAN_READABLE_DATE}
-
-    
-    """
-            )
+        Job: ${env.JOB_NAME}
+        Build number: ${env.BUILD_NUMBER}
+        Build URL: ${env.BUILD_URL}
+        Date: ${HUMAN_READABLE_DATE}
+        Commit: ${GIT_COMMIT}
+        """
+                )
+            }
         }
 
         fixed {
-            emailext(
-                to: 'tasnim.eleuch@enis.tn',
-                subject: "✅ Jenkins FIXED: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                body: """
-    The pipeline is successful again after previous failure(s).
+            script {
+                def COMMITTER_EMAIL = sh(
+                    script: "git log -1 --pretty=format:'%ae'",
+                    returnStdout: true
+                ).trim()
+                
+                emailext(
+                    to: "${COMMITTER_EMAIL}",
+                    subject: "✅ Jenkins FIXED: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                    body: """
+        The pipeline is successful again after previous failure(s).
 
-    Job: ${env.JOB_NAME}
-    Build number: ${env.BUILD_NUMBER}
-    Build URL: ${env.BUILD_URL}
-    Date: ${HUMAN_READABLE_DATE}
-
-    Docker image:
-    ${env.DOCKER_IMAGE_NAME}:${env.DOCKER_IMAGE_TAG}
-
-    SonarCloud:
-    https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}
-    """
-            )
-       }
-    }}
+        Job: ${env.JOB_NAME}
+        Build number: ${env.BUILD_NUMBER}
+        Build URL: ${env.BUILD_URL}
+        Date: ${HUMAN_READABLE_DATE}
+        Docker image: ${env.DOCKER_IMAGE_NAME}:${env.DOCKER_IMAGE_TAG}
+        SonarCloud: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}
+        """
+                )
+            }
+        }}}

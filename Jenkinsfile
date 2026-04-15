@@ -721,7 +721,7 @@ fi
                             exit 1
                         fi
                         
-                        echo "📦 Latest pod: $POD_NAME"
+                        echo "📦📦 Latest pod: $POD_NAME"
                         
                         # Wait until it's actually Running (up to 120s)
                         echo "⏳ Waiting for pod to reach Running state..."

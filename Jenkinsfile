@@ -861,7 +861,7 @@ fi
 
         fixed {
             emailext(
-                to: 'your@email.com',
+                to: 'tasnim.eleuch@enis.tn',
                 subject: "✅ Jenkins FIXED: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
                 body: """
     The pipeline is successful again after previous failure(s).

@@ -843,7 +843,7 @@ fi
             echo "📊 SonarCloud results: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
 
             emailext(
-                to: 'your@email.com',
+                to: 'tasnim.eleuch@enis.tn',
                 subject: "❌ Jenkins FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
                 body: """
     Build failed.

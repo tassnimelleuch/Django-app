@@ -853,7 +853,8 @@ fi
     Build URL: ${env.BUILD_URL}
     Date: ${HUMAN_READABLE_DATE}
 
-   
+    
+    """
             )
         }
 

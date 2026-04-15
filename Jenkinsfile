@@ -878,5 +878,5 @@ fi
     https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}
     """
             )
-        }
-    }
+       }
+    }}

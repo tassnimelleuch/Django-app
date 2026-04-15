@@ -795,16 +795,15 @@ fi
             }
         }
 
-    } // end stages
+    } 
+
     post {
         always {
             archiveArtifacts artifacts: 'coverage.xml, junit-results.xml, pylint-report.json, sonar-check.json', allowEmptyArchive: true
-
             sh '''
                 rm -rf ${VENV_DIR} || true
                 rm -f coverage.xml junit-results.xml pylint-report.json sonar-check.json init_django.py check-sonarcloud.sh full-response.json sonarcloud-status.txt || true
             '''
-
             echo "✅ Pipeline execution completed"
         }
 
@@ -838,24 +837,40 @@ fi
         }
 
         failure {
+            echo "❌❌❌ PIPELINE FAILED ❌❌❌"
+            echo "📅 Build: ${HUMAN_READABLE_DATE} (#${BUILD_NUMBER})"
+            echo "📊 SonarCloud results: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
+
             script {
                 def COMMITTER_EMAIL = sh(
                     script: "git log -1 --pretty=format:'%ae'",
                     returnStdout: true
                 ).trim()
-                
+
+                def TRIGGERED_BY = currentBuild.getBuildCauses('hudson.model.UserIdCause')
+
+                def recipient
+                if (TRIGGERED_BY) {
+                    wrap([$class: 'BuildUser']) {
+                        recipient = env.BUILD_USER_EMAIL
+                    }
+                } else {
+                    recipient = COMMITTER_EMAIL
+                }
+
                 emailext(
-                    to: "${COMMITTER_EMAIL}",
+                    to: "${recipient}",
                     subject: "❌ Jenkins FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
                     body: """
-        Build failed.
+    Build failed.
 
-        Job: ${env.JOB_NAME}
-        Build number: ${env.BUILD_NUMBER}
-        Build URL: ${env.BUILD_URL}
-        Date: ${HUMAN_READABLE_DATE}
-        Commit: ${GIT_COMMIT}
-        """
+    Job: ${env.JOB_NAME}
+    Build number: ${env.BUILD_NUMBER}
+    Build URL: ${env.BUILD_URL}
+    Date: ${HUMAN_READABLE_DATE}
+    Commit: ${GIT_COMMIT}
+    SonarCloud: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}
+    """
                 )
             }
         }
@@ -866,20 +881,32 @@ fi
                     script: "git log -1 --pretty=format:'%ae'",
                     returnStdout: true
                 ).trim()
-                
+
+                def TRIGGERED_BY = currentBuild.getBuildCauses('hudson.model.UserIdCause')
+
+                def recipient
+                if (TRIGGERED_BY) {
+                    wrap([$class: 'BuildUser']) {
+                        recipient = env.BUILD_USER_EMAIL
+                    }
+                } else {
+                    recipient = COMMITTER_EMAIL
+                }
+
                 emailext(
-                    to: "${COMMITTER_EMAIL}",
+                    to: "${recipient}",
                     subject: "✅ Jenkins FIXED: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
                     body: """
-        The pipeline is successful again after previous failure(s).
+    The pipeline is successful again after previous failure(s).
 
-        Job: ${env.JOB_NAME}
-        Build number: ${env.BUILD_NUMBER}
-        Build URL: ${env.BUILD_URL}
-        Date: ${HUMAN_READABLE_DATE}
-        Docker image: ${env.DOCKER_IMAGE_NAME}:${env.DOCKER_IMAGE_TAG}
-        SonarCloud: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}
-        """
+    Job: ${env.JOB_NAME}
+    Build number: ${env.BUILD_NUMBER}
+    Build URL: ${env.BUILD_URL}
+    Date: ${HUMAN_READABLE_DATE}
+    Docker image: ${env.DOCKER_IMAGE_NAME}:${env.DOCKER_IMAGE_TAG}
+    SonarCloud: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}
+    """
                 )
             }
-        }}}
+        }
+    }

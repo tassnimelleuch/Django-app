@@ -853,10 +853,7 @@ fi
     Build URL: ${env.BUILD_URL}
     Date: ${HUMAN_READABLE_DATE}
 
-    SonarCloud:
-    https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}
-    """
-            )
+    
         }
 
         fixed {

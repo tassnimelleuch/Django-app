@@ -280,6 +280,12 @@ fi
                     """
                     
                     echo "✅ Docker image built: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
+
+                }}}
+
+            stage('Push Docker Image') {
+                steps {
+                    script {
                     echo "📤 Pushing Docker images to Docker Hub..."
                     
                     sh '''
@@ -318,7 +324,7 @@ fi
                         
                         echo "✅✅✅ DOCKER PUSH COMPLETED SUCCESSFULLY! ✅✅✅"
                     '''
-                }
+                }}
             }
             post {
                 failure {

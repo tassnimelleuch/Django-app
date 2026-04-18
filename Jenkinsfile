@@ -281,9 +281,14 @@ fi
                     
                     echo "✅ Docker image built: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
 
-                }}}
+                }
+            }
+        }
 
             stage('Push Docker Image') {
+                environment {
+                    DOCKER_HUB_CREDS = credentials('docker-hub-credentials')
+                }
                 steps {
                     script {
                     echo "📤 Pushing Docker images to Docker Hub..."
@@ -324,8 +329,8 @@ fi
                         
                         echo "✅✅✅ DOCKER PUSH COMPLETED SUCCESSFULLY! ✅✅✅"
                     '''
-                }}
-            }
+                    }
+                }
             post {
                 failure {
                     echo "❌❌❌ DOCKER BUILD OR PUSH FAILED AFTER MULTIPLE RETRIES ❌❌❌"
@@ -915,4 +920,5 @@ fi
                 )
             }
         }
-    }}
+    }
+}

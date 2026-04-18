@@ -235,7 +235,7 @@ fi
             }
         }
         
-        stage('Docker Build and Push') {
+        stage('Docker Image Build') {
             when {
                 expression { fileExists('Dockerfile') }
                 expression { env.DOCKER_IMAGE_NAME }

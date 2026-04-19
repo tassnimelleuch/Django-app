@@ -50,7 +50,7 @@ pipeline {
             steps {
                 sh '''
                     rm -rf venv || true
-                    rm -f coverage.xml junit-results.xml pylint-report.json sonar-check.json || true
+                    rm -f coverage.xml junit-results.xml sonar-check.json || true
                     rm -f init_django.py check-sonarcloud.sh full-response.json sonarcloud-status.txt || true
                     echo "✅ Workspace cleaned (build tts removed)"
                 '''

@@ -810,10 +810,10 @@ fi
 
     post {
         always {
-            archiveArtifacts artifacts: 'coverage.xml, junit-results.xml, pylint-report.json, sonar-check.json', allowEmptyArchive: true
+            archiveArtifacts artifacts: 'coverage.xml, junit-results.xml, sonar-check.json', allowEmptyArchive: true
             sh '''
                 rm -rf ${VENV_DIR} || true
-                rm -f coverage.xml junit-results.xml pylint-report.json sonar-check.json init_django.py check-sonarcloud.sh full-response.json sonarcloud-status.txt || true
+                rm -f coverage.xml junit-results.xml  sonar-check.json init_django.py check-sonarcloud.sh full-response.json sonarcloud-status.txt || true
             '''
             echo "✅ Pipeline execution completed"
         }

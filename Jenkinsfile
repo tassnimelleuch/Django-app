@@ -52,7 +52,7 @@ pipeline {
                     rm -rf venv || true
                     rm -f coverage.xml junit-results.xml pylint-report.json sonar-check.json || true
                     rm -f init_django.py check-sonarcloud.sh full-response.json sonarcloud-status.txt || true
-                    echo "✅ Workspace cleaned (build artifacts removed)"
+                    echo "✅ Workspace cleaned (build tts removed)"
                 '''
                 script {
                     echo "🏷️ Build: ${HUMAN_READABLE_DATE} (#${BUILD_NUMBER})"
@@ -810,7 +810,7 @@ fi
 
     post {
         always {
-            archiveArtifacts artifacts: 'coverage.xml, junit-results.xml, sonar-check.json', allowEmptyArchive: true
+            archiveArtifacts artifacts: 'coverage.xml, junit-results.xml, sonar-check.json, pylint-report.json', allowEmptyArchive: true
             sh '''
                 rm -rf ${VENV_DIR} || true
                 rm -f coverage.xml junit-results.xml  sonar-check.json init_django.py check-sonarcloud.sh full-response.json sonarcloud-status.txt || true

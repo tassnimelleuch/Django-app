@@ -99,7 +99,6 @@
 #          persistentVolumeClaim:
 #            claimName: django-db-pvc 
 
-
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -119,7 +118,8 @@ spec:
       
       initContainers:
         - name: fix-permissions
-          image: busybox:latest
+          image: busybox:1.36.1          
+          imagePullPolicy: IfNotPresent  
           command: ['sh', '-c']
           args:
             - |
@@ -134,7 +134,8 @@ spec:
               mountPath: /data
 
         - name: migrate
-          image: tasnimelleuchenis/django-contact-app:latest
+          image: tasnimelleuchenis/django-contact-app:latest  
+          imagePullPolicy: Always                             
           command: ["sh", "-c"]
           args:
             - |
@@ -167,7 +168,8 @@ spec:
 
       containers:
         - name: django-contact-app
-          image: tasnimelleuchenis/django-contact-app:latest
+          image: tasnimelleuchenis/django-contact-app:latest  
+          imagePullPolicy: Always                             
           ports:
             - containerPort: 8000
           env:

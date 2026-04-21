@@ -202,5 +202,3 @@ def delete_phone(request, phone_id):
         return redirect('contact_detail', contact.id)
 
     return render(request, 'accounts/delete_phone.html', {'phone': phone, 'contact': contact})
-
-

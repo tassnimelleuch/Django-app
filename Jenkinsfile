@@ -55,7 +55,7 @@ pipeline {
                     echo "✅ Workspace cleaned (build tts removed)"
                 '''
                 script {
-                    echo "🏷️ Build: ${HUMAN_READABLE_DATE} (#${BUILD_NUMBER})"
+                    echo " Build: ${HUMAN_READABLE_DATE} (#${BUILD_NUMBER})"
                     echo "🐳 Docker tag: ${DOCKER_IMAGE_TAG}"
                     echo "🔍 Commit: ${GIT_COMMIT}"
                 }

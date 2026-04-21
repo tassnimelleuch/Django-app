@@ -174,17 +174,30 @@ except Exception as e:
                         writeFile file: 'check-sonarcloud.sh', text: '''#!/bin/bash
 set -e
 
-echo "Fetching check runs from GitHub API..."
-curl -s -H "Authorization: token $GITHUB_TOKEN" \
-    "https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/commits/${GIT_COMMIT}/check-runs" > full-response.json
+MAX_ATTEMPTS=12
+SLEEP_SECONDS=15
+
+for attempt in $(seq 1 ${MAX_ATTEMPTS}); do
+    echo "Fetching check runs from GitHub API... (attempt ${attempt}/${MAX_ATTEMPTS})"
+    curl -s -H "Authorization: token $GITHUB_TOKEN" \
+        "https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/commits/${GIT_COMMIT}/check-runs" > full-response.json
+
+    if grep -i "sonarcloud" full-response.json > /dev/null; then
+        echo "✅ SonarCloud check found"
+        break
+    fi
+
+    if [ $attempt -lt ${MAX_ATTEMPTS} ]; then
+        echo "⏳ SonarCloud check not found yet. Waiting ${SLEEP_SECONDS}s..."
+        sleep ${SLEEP_SECONDS}
+    fi
+done
 
 echo "===== FULL GITHUB RESPONSE ====="
 cat full-response.json
 echo "===== END RESPONSE ====="
 
 if grep -i "sonarcloud" full-response.json > /dev/null; then
-    echo "✅ SonarCloud check found"
-    
     CONCLUSION=$(grep -i -A5 "sonarcloud" full-response.json | \
                 grep -i "conclusion" | \
                 head -1 | \
@@ -206,7 +219,7 @@ if grep -i "sonarcloud" full-response.json > /dev/null; then
             ;;
     esac
 else
-    echo "SONARCLOUD NOT FOUND IN GITHUB API!"
+    echo "SONARCLOUD NOT FOUND IN GITHUB API AFTER WAITING"
     echo "First 20 lines of response:"
     head -20 full-response.json
     exit 1

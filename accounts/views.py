@@ -204,5 +204,3 @@ def delete_phone(request, phone_id):
     return render(request, 'accounts/delete_phone.html', {'phone': phone, 'contact': contact})
 
 
-def security_test():
-    password = "1234"

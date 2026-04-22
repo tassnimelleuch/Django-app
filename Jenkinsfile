@@ -927,8 +927,6 @@ fi
     Build number: ${env.BUILD_NUMBER}
     Build URL: ${env.BUILD_URL}
     Date: ${HUMAN_READABLE_DATE}
-    Docker image: ${env.DOCKER_IMAGE_NAME}:${env.DOCKER_IMAGE_TAG}
-    SonarCloud: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}
     """
                 )
             }

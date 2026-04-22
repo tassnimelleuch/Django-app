@@ -204,5 +204,5 @@ def delete_phone(request, phone_id):
     return render(request, 'accounts/delete_phone.html', {'phone': phone, 'contact': contact})
 
 
-def testing_sonar_fail():
-    password = "123456"
+#def testing_sonar_fail():
+#   password = "123456"

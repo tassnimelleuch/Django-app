@@ -1,55 +1,33 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Register</title>
-    <style>
-        body { font-family: Arial; margin: 40px; }
-        .container { max-width: 400px; margin: 0 auto; }
-        .form-container { margin-bottom: 15px; }
-        label { display: block; margin-bottom: 5px; }
-        input { 
-            padding: 8px; 
-            width: 300px; 
-            box-sizing: border-box;
-        }
-        .error { color: red; font-size: 14px; }
-        .success { color: green; }
-        button { 
-            background: #2E7D32; 
-            color: white; 
-            padding: 12px; 
-            border: none; 
-            width: 300px;
-            box-sizing: border-box;
-            margin-top: 10px;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h2>Create Your Account</h2>
-        
-        <form method="POST">
-            {% csrf_token %}
-            
-            {% for field in form %}
-            <div class="form-container">
+{% extends "accounts/base.html" %}
+
+{% block title %}Register{% endblock %}
+
+{% block content %}
+<div class="page-head narrow center">
+    <div>
+        <div class="eyebrow">Get started</div>
+        <h1 class="page-title">Create Your Account</h1>
+        <p class="subtle">Set up your account to save and track contacts.</p>
+    </div>
+</div>
+
+<div class="form-card reveal narrow">
+    <form method="POST" class="form-fields stack">
+        {% csrf_token %}
+        {% for field in form %}
+            <p>
                 {{ field.label_tag }}
                 {{ field }}
                 {% if field.errors %}
-                    <div class="error">{{ field.errors }}</div>
+                    <span class="meta">{{ field.errors }}</span>
                 {% endif %}
-            </div>
-            {% endfor %}
-            
-            <div class="form-container">
-                <button type="submit">Register</button>
-            </div>
-        </form>
-        
-        <p style="margin-top: 20px;">
-            Already have an account? <a href="{% url 'login' %}">Login here</a>
-        </p>
-    </div>
-</body>
-</html>
+            </p>
+        {% endfor %}
+        <button type="submit" class="btn">Register</button>
+    </form>
+
+    <p class="meta center mt-sm">
+        Already have an account? <a href="{% url 'login' %}" class="link">Login here</a>
+    </p>
+</div>
+{% endblock %}

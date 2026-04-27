@@ -1,56 +1,30 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Your Dashboard</title>
-    <style>
-        body { font-family: Arial; padding: 20px; }
-        .welcome { color: green; font-size: 24px; }
-        .menu { margin-top: 30px; }
-        .menu a { margin-right: 20px; padding: 10px; background: #2E7D32; color: white; text-decoration: none; }
-        .logout-btn {
-        background: linear-gradient(135deg, #ff5252, #e53935);
-        color: white;
-        border: none;
-        padding: 10px 18px;
-        border-radius: 8px;
-        cursor: pointer;
-        font-size: 14px;
-        font-weight: bold;
-        transition: all 0.3s ease;
-        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
-    }
+{% extends "accounts/base.html" %}
 
-    .logout-btn:hover {
-        background: linear-gradient(135deg, #e53935, #c62828);
-        transform: translateY(-2px);
-        box-shadow: 0 6px 14px rgba(0, 0, 0, 0.2);
-    }
+{% block title %}Your Dashboard{% endblock %}
 
-    .logout-btn:active {
-        transform: scale(0.96);
-    }
-    </style>
-</head>
-<body>
-    <div class="welcome">
-        ✅Welcome, <strong>{{ user.username }}</strong>!
+{% block content %}
+<div class="page-head">
+    <div>
+        <div class="eyebrow">Overview</div>
+        <h1 class="page-title">Welcome, {{ user.username }}</h1>
+        <p class="subtle">Keep your relationships organized and close.</p>
     </div>
-    
-    
-    
-    <div style="margin-top: 30px; padding: 20px; background: #f5f5f5;">
-        <h3>Your Account Info:</h3>
-        <p><strong>Username:</strong> {{ user.username }}</p>
-        <p><strong>Email:</strong> {{ user.email }}</p>
-        <p><strong>Joined:</strong> {{ user.date_joined|date:"F d, Y" }}</p>
+    <div class="toolbar">
+        <a href="{% url 'contact_list' %}" class="btn btn-secondary">View Contacts</a>
+        <a href="{% url 'add_contact' %}" class="btn">Add New Contact</a>
     </div>
-<div class="menu">
-    <a href="{% url 'contact_list' %}" style="background: #2196F3;">📇 View Contacts</a>
-    <a href="{% url 'add_contact' %}" style="background: #2E7D32;">➕ Add New Contact</a>
-<form method="post" action="{% url 'logout' %}" style="margin-left: 15px; display: inline-block;">
-    {% csrf_token %}
-    <button type="submit" class="logout-btn">🚪 Logout</button>
-</form>
-</form></div>
-</body>
-</html>
+</div>
+
+<div class="grid">
+    <div class="card reveal">
+        <h2>Your Account Info</h2>
+        <div class="stack">
+            <div class="card-soft">
+                <p><strong>Username:</strong> {{ user.username }}</p>
+                <p><strong>Email:</strong> {{ user.email }}</p>
+                <p><strong>Joined:</strong> {{ user.date_joined|date:"F d, Y" }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,36 +1,30 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Delete Contact</title>
-    <style>
-        body { font-family: Arial; margin: 40px; max-width: 600px; }
-        .warning { background: #fff3cd; border: 1px solid #ffc107; padding: 15px; border-radius: 4px; margin: 20px 0; }
-        .warning h2 { color: #856404; margin-top: 0; }
-        .btn { padding: 10px 20px; border: none; cursor: pointer; margin-right: 10px; }
-        .btn-delete { background: #f44336; color: white; }
-        .btn-cancel { background: #616161; color: white; }
-        .back-link { margin-bottom: 20px; }
-        .back-link a { color: #2E7D32; text-decoration: none; }
-    </style>
-</head>
-<body>
-    <div class="back-link">
-        <a href="{% url 'contact_detail' contact.id %}">← Back to {{ contact.first_name }} {{ contact.last_name }}</a>
+{% extends "accounts/base.html" %}
+
+{% block title %}Delete Contact{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <div class="eyebrow">Confirm removal</div>
+        <h1 class="page-title">Delete Contact</h1>
+        <p class="subtle">Deleting a contact removes all related details.</p>
     </div>
-    
-    <h1>🗑️ Delete Contact</h1>
-    
+    <div class="toolbar">
+        <a class="btn btn-secondary btn-sm" href="{% url 'contact_detail' contact.id %}">Back to {{ contact.first_name }} {{ contact.last_name }}</a>
+    </div>
+</div>
+
+<div class="card stack reveal">
     <div class="warning">
         <h2>Are you sure?</h2>
         <p>You are about to permanently delete <strong>{{ contact.first_name }} {{ contact.last_name }}</strong>.</p>
         <p>This action cannot be undone.</p>
     </div>
-    
-    <form method="POST">
+
+    <form method="POST" class="toolbar">
         {% csrf_token %}
-        
-        <button type="submit" class="btn btn-delete">Yes, Delete Contact</button>
-        <a href="{% url 'contact_detail' contact.id %}" class="btn btn-cancel">Cancel</a>
+        <button type="submit" class="btn btn-danger">Yes, Delete Contact</button>
+        <a href="{% url 'contact_detail' contact.id %}" class="btn btn-secondary">Cancel</a>
     </form>
-</body>
-</html>
+</div>
+{% endblock %}

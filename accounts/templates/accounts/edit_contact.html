@@ -1,36 +1,32 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Edit Contact</title>
-    <style>
-        body { font-family: Arial; margin: 40px; max-width: 600px; }
-        .form-group { margin-bottom: 15px; }
-        label { display: block; margin-bottom: 5px; font-weight: bold; }
-        input, select { width: 100%; padding: 8px; box-sizing: border-box; }
-        .section { background: #f9f9f9; padding: 15px; margin: 20px 0; border-left: 4px solid #2E7D32; }
-        .btn { background: #2E7D32; color: white; padding: 10px 20px; border: none; cursor: pointer; }
-        .btn-cancel { background: #616161; margin-left: 10px; }
-        .back-link { margin-bottom: 20px; }
-        .back-link a { color: #2E7D32; text-decoration: none; }
-    </style>
-</head>
-<body>
-    <div class="back-link">
-        <a href="{% url 'contact_detail' contact.id %}">← Back to {{ contact.first_name }} {{ contact.last_name }}</a>
+{% extends "accounts/base.html" %}
+
+{% block title %}Edit Contact{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <div class="eyebrow">Update</div>
+        <h1 class="page-title">Edit Contact</h1>
+        <p class="subtle">Refine the details for {{ contact.first_name }} {{ contact.last_name }}.</p>
     </div>
-    
-    <h1>✏️ Edit Contact</h1>
-    
-    <form method="POST">
+    <div class="toolbar">
+        <a href="{% url 'contact_detail' contact.id %}" class="btn btn-secondary btn-sm">Back to Contact</a>
+    </div>
+</div>
+
+<div class="form-card reveal">
+    <form method="POST" class="stack">
         {% csrf_token %}
-        
         <div class="section">
             <h3>Contact Information</h3>
-            {{ form.as_p }}
+            <div class="form-fields">
+                {{ form.as_p }}
+            </div>
         </div>
-        
-        <button type="submit" class="btn">Save Changes</button>
-        <a href="{% url 'contact_detail' contact.id %}" class="btn btn-cancel">Cancel</a>
+        <div class="toolbar">
+            <button type="submit" class="btn">Save Changes</button>
+            <a href="{% url 'contact_detail' contact.id %}" class="btn btn-secondary">Cancel</a>
+        </div>
     </form>
-</body>
-</html>
+</div>
+{% endblock %}

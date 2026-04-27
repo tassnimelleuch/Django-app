@@ -1,10 +1,18 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Logged Out</title>
-</head>
-<body>
-    <h2>You have been successfully logged out</h2>
-    <a href="{% url 'login' %}">Click here to login again</a>
-</body>
-</html>
+{% extends "accounts/base.html" %}
+
+{% block title %}Logged Out{% endblock %}
+
+{% block content %}
+<div class="page-head narrow center">
+    <div>
+        <div class="eyebrow">Session ended</div>
+        <h1 class="page-title">You are logged out</h1>
+        <p class="subtle">Come back anytime to keep your contacts updated.</p>
+    </div>
+</div>
+
+<div class="card reveal narrow center">
+    <p class="meta">You have been successfully logged out.</p>
+    <a href="{% url 'login' %}" class="btn">Login again</a>
+</div>
+{% endblock %}

@@ -1,41 +1,39 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>My Contacts</title>
-    <style>
-        body { font-family: Arial; margin: 40px; }
-        .header { display: flex; justify-content: space-between; align-items: center; }
-        .btn { background: #2E7D32; color: white; padding: 10px 15px; text-decoration: none; }
-        .contact-card { border: 1px solid #ddd; padding: 15px; margin: 10px 0; }
-        .empty-state { color: #666; font-style: italic; }
-    </style>
-</head>
-<body>
-    <div class="header">
-        <h1>My Contacts</h1>
-        <div>
-            <a href="{% url 'dashboard' %}" class="btn">← Dashboard</a>
-            <a href="{% url 'add_contact' %}" class="btn" style="background: #2196F3;">Add Contact</a>
-        </div>
+{% extends "accounts/base.html" %}
+
+{% block title %}My Contacts{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <div class="eyebrow">Contacts</div>
+        <h1 class="page-title">My Contacts</h1>
+        <p class="subtle">You have {{ contacts.count }} contact(s) saved.</p>
     </div>
-    
-    {% if contacts %}
-        <p>You have {{ contacts.count }} contact(s)</p>
-        
+    <div class="toolbar">
+        <a href="{% url 'dashboard' %}" class="btn btn-secondary">Back to Dashboard</a>
+        <a href="{% url 'add_contact' %}" class="btn">Add Contact</a>
+    </div>
+</div>
+
+{% if contacts %}
+    <div class="list">
         {% for contact in contacts %}
-        <div class="contact-card">
-            <h3>{{ contact.first_name }} {{ contact.last_name }}</h3>
-            <p>📧 {{ contact.email|default:"No email" }}</p>
-            <p>🔗 {{ contact.linkedin|default:"No LinkedIn" }}</p>
-            <p>📅 Added: {{ contact.created_at|date:"M d, Y" }}</p>
-            <a href="{% url 'contact_detail' contact.id %}">Details →</a>
-        </div>
+            <div class="list-item reveal">
+                <div>
+                    <h3>{{ contact.first_name }} {{ contact.last_name }}</h3>
+                    <p class="meta">Email: {{ contact.email|default:"No email" }}</p>
+                    <p class="meta">LinkedIn: {{ contact.linkedin|default:"No LinkedIn" }}</p>
+                    <p class="meta">Added: {{ contact.created_at|date:"M d, Y" }}</p>
+                </div>
+                <a href="{% url 'contact_detail' contact.id %}" class="btn btn-secondary btn-sm">Details</a>
+            </div>
         {% endfor %}
-    {% else %}
-        <div class="empty-state">
-            <p>You don't have any contacts yet.</p>
-            <a href="{% url 'add_contact' %}" class="btn">Add Your First Contact</a>
-        </div>
-    {% endif %}
-</body>
-</html>
+    </div>
+{% else %}
+    <div class="card reveal">
+        <h2>No contacts yet</h2>
+        <p class="meta">Start building your list by adding your first contact.</p>
+        <a href="{% url 'add_contact' %}" class="btn">Add Your First Contact</a>
+    </div>
+{% endif %}
+{% endblock %}

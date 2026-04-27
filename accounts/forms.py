@@ -27,4 +27,4 @@ class RegisterForm(UserCreationForm):
         if User.objects.filter(email=email).exists():
             raise ValidationError("A user with this email already exists.")
 
-        return email
+        return email #test

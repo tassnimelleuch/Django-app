@@ -62,18 +62,12 @@ pipeline {
             }
         }
         
-        stage('Create Virtual Environment') {
+        stage('Setup Python Environment') {
             steps {
                 script {
                     echo 'Creating virtual environment...'
                     sh '${PYTHON} -m venv ${VENV_DIR}'
-                }
-            }
-        }
-        
-        stage('Install Dependencies') {
-            steps {
-                script {
+
                     sh '''
                         echo "Installing/upgrading pip..."
                         ${PIP} install --upgrade pip setuptools wheel
@@ -88,13 +82,7 @@ pipeline {
                             echo "✅ Basic packages installed"
                         fi
                     '''
-                }
-            }
-        }
-        
-        stage('Initialize Django') {
-            steps {
-                script {
+
                     echo "🔧 Initializing Django with test SECRET_KEY..."
                     
                     writeFile file: 'init_django.py', text: """
@@ -600,7 +588,7 @@ fi
         
 
         
-        stage('Prepare Kubernetes Manifests') {
+        stage('Prepare and Deploy to AKS') {
             steps {
                 script {
                     echo "📝 Preparing Kubernetes manifests for AKS..."
@@ -613,13 +601,7 @@ fi
                     
                     // Show the updated image
                     sh "grep -A1 'image:' k8s/deployment.yaml | head -2"
-                }
-            }
-        }
-        
-        stage('Deploy to AKS') {
-            steps {
-                script {
+
                     echo "🚀 Deploying to Azure Kubernetes Service..."
                     
                     sh '''
@@ -691,7 +673,7 @@ fi
             }
         }
 
-        stage('Wait for AKS Rollout') {
+        stage('Wait for AKS Rollout and Verify') {
             steps {
                 script {
                     echo "⏳ Waiting for AKS deployment to be ready"
@@ -721,13 +703,7 @@ fi
                             exit 1
                         fi
                     '''
-                }
-            }
-        }
 
-        stage('Verify AKS Deployment') {
-            steps {
-                script {
                     echo "🔍 Verifying AKS deployment..."
                     
                     sh '''

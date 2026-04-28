@@ -46,6 +46,11 @@ pipeline {
     }
     
     stages {
+        stage('Force Fail') {
+            steps {
+                sh 'exit 1'
+            }
+        }
         stage('Clean Workspace') {
             steps {
                 sh '''

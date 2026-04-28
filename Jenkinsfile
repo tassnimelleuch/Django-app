@@ -759,7 +759,7 @@ fi
                         sleep 5
                         
                         if systemctl is-active --quiet kubectl-port-forward; then
-                            echo "✅ Port-forward service is running"
+                            echo " Port-forward service is running"
                         else
                             echo "❌ Port-forward service failed to start!"
                             sudo journalctl -u kubectl-port-forward --no-pager -n 20

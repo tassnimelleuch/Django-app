@@ -338,7 +338,7 @@ fi
                     sh 'docker logout || true'
                 }
                 success {
-                    echo "✅ Docker build and push completed successfully"
+                    echo "Docker build and push completed successfully"
                 }
             }
         }

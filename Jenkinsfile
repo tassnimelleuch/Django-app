@@ -2,10 +2,9 @@ pipeline {
     agent any
     
     options {
-        buildDiscarder(logRotator(numToKeepStr: '10'))
+        skipDefaultCheckout(true)
         timeout(time: 20, unit: 'MINUTES')  
     }
-    
     environment {
         PYTHON = sh(script: 'which python3 || which python', returnStdout: true).trim()
         VENV_DIR = 'venv'
@@ -45,7 +44,14 @@ pipeline {
         K8S_SERVICE = 'django-contact-service'
     }
     
-    stages {
+        stages {
+        stage('Checkout Branch') {
+            steps {
+                git branch: params.BRANCH_NAME,
+                    url: 'https://github.com/tassnimelleuch/Django-app.git'
+            }
+        }
+
         stage('Force Fail') {
             steps {
                 sh 'exit 1'

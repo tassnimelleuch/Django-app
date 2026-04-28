@@ -1,10 +1,11 @@
 pipeline {
     agent any
     
-    options {
-        buildDiscarder(logRotator(numToKeepStr: '10'))
-        timeout(time: 20, unit: 'MINUTES')  
-    }
+options {
+    skipDefaultCheckout(true)
+    buildDiscarder(logRotator(numToKeepStr: '10'))
+    timeout(time: 20, unit: 'MINUTES')  
+}
     
     environment {
         PYTHON = sh(script: 'which python3 || which python', returnStdout: true).trim()
@@ -46,6 +47,12 @@ pipeline {
     }
     
     stages {
+        stage('Checkout Branch') {
+            steps {
+                git branch: params.BRANCH_NAME,
+                    url: 'https://github.com/tassnimelleuch/Django-app.git'
+            }
+        }
         stage('Clean Workspace') {
             steps {
                 sh '''

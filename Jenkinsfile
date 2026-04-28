@@ -1,11 +1,10 @@
 pipeline {
     agent any
     
-options {
-    skipDefaultCheckout(true)
-    buildDiscarder(logRotator(numToKeepStr: '10'))
-    timeout(time: 20, unit: 'MINUTES')  
-}
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+        timeout(time: 20, unit: 'MINUTES')  
+    }
     
     environment {
         PYTHON = sh(script: 'which python3 || which python', returnStdout: true).trim()
@@ -47,12 +46,6 @@ options {
     }
     
     stages {
-        stage('Checkout Branch') {
-            steps {
-                git branch: params.BRANCH_NAME,
-                    url: 'https://github.com/tassnimelleuch/Django-app.git'
-            }
-        }
         stage('Clean Workspace') {
             steps {
                 sh '''
@@ -766,7 +759,7 @@ fi
                         sleep 5
                         
                         if systemctl is-active --quiet kubectl-port-forward; then
-                            echo " Port-forward service is running"
+                            echo "✅ Port-forward service is running"
                         else
                             echo "❌ Port-forward service failed to start!"
                             sudo journalctl -u kubectl-port-forward --no-pager -n 20

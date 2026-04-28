@@ -235,104 +235,104 @@ fi
                 }
             }
         }
-        
-        // stage('Docker Image Build') {
-        //     when {
-        //         expression { fileExists('Dockerfile') }
-        //         expression { env.DOCKER_IMAGE_NAME }
-        //     }
-        //     environment {
-        //         DOCKER_HUB_CREDS = credentials('docker-hub-credentials')
-        //     }
-            //     steps {
-            //         script {
-            //             echo "🐳 Building Docker image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
-            //             
-            //             sh '''
-            //                 echo "Pulling base image with retries..."
-            //                 BASE_IMAGE=$(grep -i "^FROM" Dockerfile | head -1 | cut -d' ' -f2)
-            //                 
-            //                 for i in $(seq 1 ${DOCKER_PULL_RETRIES}); do
-            //                     echo "Attempt $i of ${DOCKER_PULL_RETRIES} to pull ${BASE_IMAGE}..."
-            //                     if timeout 300 docker pull ${BASE_IMAGE}; then
-            //                         echo "✅ Base image pulled successfully"
-            //                         break
-            //                     else
-            //                         if [ $i -eq ${DOCKER_PULL_RETRIES} ]; then
-            //                             echo "❌ Failed to pull base image after ${DOCKER_PULL_RETRIES} attempts"
-            //                             exit 1
-            //                         fi
-            //                         echo "Pull failed, waiting ${DOCKER_PULL_DELAY} seconds before retry..."
-            //                         sleep ${DOCKER_PULL_DELAY}
-            //                     fi
-            //                 done
-            //             '''
-            //             
-            //             sh """
-            //                 docker build \
-            //                     --build-arg BUILD_NUMBER=${env.BUILD_NUMBER} \
-            //                     --build-arg BUILD_DATE="\$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
-            //                     --build-arg VCS_REF="\$(git rev-parse --short HEAD)" \
-            //                     --build-arg BUILD_TAG="${env.DOCKER_IMAGE_TAG}" \
-            //                     --build-arg HUMAN_DATE="${env.HUMAN_READABLE_DATE}" \
-            //                     -t ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG} \
-            //                     -t ${DOCKER_IMAGE_NAME}:latest \
-            //                     .
-            //             """
-            //             
-            //             echo "✅ Docker image built: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
+     /*   
+        stage('Docker Image Build') {
+            when {
+                expression { fileExists('Dockerfile') }
+                expression { env.DOCKER_IMAGE_NAME }
+            }
+            environment {
+                DOCKER_HUB_CREDS = credentials('docker-hub-credentials')
+            }
+            steps {
+                script {
+                    echo "🐳 Building Docker image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
+                    
+                    sh '''
+                        echo "Pulling base image with retries..."
+                        BASE_IMAGE=$(grep -i "^FROM" Dockerfile | head -1 | cut -d' ' -f2)
+                        
+                        for i in $(seq 1 ${DOCKER_PULL_RETRIES}); do
+                            echo "Attempt $i of ${DOCKER_PULL_RETRIES} to pull ${BASE_IMAGE}..."
+                            if timeout 300 docker pull ${BASE_IMAGE}; then
+                                echo "✅ Base image pulled successfully"
+                                break
+                            else
+                                if [ $i -eq ${DOCKER_PULL_RETRIES} ]; then
+                                    echo "❌ Failed to pull base image after ${DOCKER_PULL_RETRIES} attempts"
+                                    exit 1
+                                fi
+                                echo "Pull failed, waiting ${DOCKER_PULL_DELAY} seconds before retry..."
+                                sleep ${DOCKER_PULL_DELAY}
+                            fi
+                        done
+                    '''
+                    
+                    sh """
+                        docker build \
+                            --build-arg BUILD_NUMBER=${env.BUILD_NUMBER} \
+                            --build-arg BUILD_DATE="\$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+                            --build-arg VCS_REF="\$(git rev-parse --short HEAD)" \
+                            --build-arg BUILD_TAG="${env.DOCKER_IMAGE_TAG}" \
+                            --build-arg HUMAN_DATE="${env.HUMAN_READABLE_DATE}" \
+                            -t ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG} \
+                            -t ${DOCKER_IMAGE_NAME}:latest \
+                            .
+                    """
+                    
+                    echo "✅ Docker image built: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
 
-            //         }
-            //     }
-        // }
+                }
+            }
+        }
 
-        //     stage('Push Docker Image') {
-        //         environment {
-        //             DOCKER_HUB_CREDS = credentials('docker-hub-credentials')
-        //         }
-        //         steps {
-        //             script {
-        //             echo "📤 Pushing Docker images to Docker Hub..."
-                    //             
-            //             sh '''
-            //                 echo "Logging into Docker Hub..."
-            //                 echo "$DOCKER_HUB_CREDS_PSW" | docker login -u "$DOCKER_HUB_CREDS_USR" --password-stdin
-            //                 
-            //                 push_with_retry() {
-            //                     local IMAGE=$1
-            //                     local TAG=$2
-            //                     local MAX_RETRIES=${DOCKER_PUSH_RETRIES}
-            //                     local DELAY=${DOCKER_PUSH_DELAY}
-            //                     local TIMEOUT=${DOCKER_PUSH_TIMEOUT}
-            //                     
-            //                     for i in $(seq 1 ${MAX_RETRIES}); do
-            //                         echo "Push attempt $i of ${MAX_RETRIES} for ${IMAGE}:${TAG}..."
-            //                         
-            //                         if timeout ${TIMEOUT} docker push ${IMAGE}:${TAG}; then
-            //                             echo "✅ Successfully pushed ${IMAGE}:${TAG}"
-            //                             return 0
-            //                         else
-            //                             if [ $i -eq ${MAX_RETRIES} ]; then
-            //                                 echo "❌ Failed to push after ${MAX_RETRIES} attempts"
-            //                                 return 1
-            //                             fi
-            //                             
-            //                             echo "Waiting ${DELAY} seconds before retry..."
-            //                             sleep ${DELAY}
-            //                         fi
-            //                     done
-            //                 }
-            //                 
-            //                 push_with_retry "${DOCKER_IMAGE_NAME}" "${DOCKER_IMAGE_TAG}" || exit 1
-            //                 push_with_retry "${DOCKER_IMAGE_NAME}" "latest" || exit 1
-            //                 
-            //                 docker logout
-            //                 
-            //                 echo "✅✅✅ DOCKER PUSH COMPLETED SUCCESSFULLY! ✅✅✅"
-            //             '''
-            //             }
-            //         }
-            //     post {
+            stage('Push Docker Image') {
+                environment {
+                    DOCKER_HUB_CREDS = credentials('docker-hub-credentials')
+                }
+                steps {
+                    script {
+                    echo "📤 Pushing Docker images to Docker Hub..."
+                    
+                    sh '''
+                        echo "Logging into Docker Hub..."
+                        echo "$DOCKER_HUB_CREDS_PSW" | docker login -u "$DOCKER_HUB_CREDS_USR" --password-stdin
+                        
+                        push_with_retry() {
+                            local IMAGE=$1
+                            local TAG=$2
+                            local MAX_RETRIES=${DOCKER_PUSH_RETRIES}
+                            local DELAY=${DOCKER_PUSH_DELAY}
+                            local TIMEOUT=${DOCKER_PUSH_TIMEOUT}
+                            
+                            for i in $(seq 1 ${MAX_RETRIES}); do
+                                echo "Push attempt $i of ${MAX_RETRIES} for ${IMAGE}:${TAG}..."
+                                
+                                if timeout ${TIMEOUT} docker push ${IMAGE}:${TAG}; then
+                                    echo "✅ Successfully pushed ${IMAGE}:${TAG}"
+                                    return 0
+                                else
+                                    if [ $i -eq ${MAX_RETRIES} ]; then
+                                        echo "❌ Failed to push after ${MAX_RETRIES} attempts"
+                                        return 1
+                                    fi
+                                    
+                                    echo "Waiting ${DELAY} seconds before retry..."
+                                    sleep ${DELAY}
+                                fi
+                            done
+                        }
+                        
+                        push_with_retry "${DOCKER_IMAGE_NAME}" "${DOCKER_IMAGE_TAG}" || exit 1
+                        push_with_retry "${DOCKER_IMAGE_NAME}" "latest" || exit 1
+                        
+                        docker logout
+                        
+                        echo "✅✅✅ DOCKER PUSH COMPLETED SUCCESSFULLY! ✅✅✅"
+                    '''
+                    }
+                }
+            post {
                 failure {
                     echo "❌❌❌ DOCKER BUILD OR PUSH FAILED AFTER MULTIPLE RETRIES ❌❌❌"
                     sh 'docker logout || true'
@@ -341,8 +341,8 @@ fi
                     echo "Docker build and push completed successfully"
                 }
             }
-        // }
-        
+        }
+       */ 
         // ===================================================================
         // MINIKUBE DEPLOYMENT STAGES
         // ===================================================================
@@ -587,212 +587,213 @@ fi
         // ===================================================================
         
 
-        // stage('Prepare and Deploy to AKS') {
-        //     steps {
-        //         script {
-        //             echo "📝 Preparing Kubernetes manifests for AKS..."
-        //             
-        //             // Update image tag in deployment
-        //             sh """
-        //                 sed -i 's|image: tasnimelleuchenis/django-contact-app:.*|image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}|g' k8s/deployment.yaml
-        //                 echo "✅ Updated deployment with new image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
-        //             """
-        //             
-        //             // Show the updated image
-        //             sh "grep -A1 'image:' k8s/deployment.yaml | head -2"
+/*       
+        stage('Prepare and Deploy to AKS') {
+            steps {
+                script {
+                    echo "📝 Preparing Kubernetes manifests for AKS..."
+                    
+                    // Update image tag in deployment
+                    sh """
+                        sed -i 's|image: tasnimelleuchenis/django-contact-app:.*|image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}|g' k8s/deployment.yaml
+                        echo "✅ Updated deployment with new image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
+                    """
+                    
+                    // Show the updated image
+                    sh "grep -A1 'image:' k8s/deployment.yaml | head -2"
 
-        //             echo "🚀 Deploying to Azure Kubernetes Service..."
-        //             
-        //             sh '''
-        //                 # Function to apply with retry
-        //                 apply_with_retry() {
-        //                     local file=$1
-        //                     local name=$2
-        //                     local max_retries=3
-        //                     local retry=0
-        //                     
-        //                     echo "📄 Applying $name from $file..."
-        //                     
-        //                     while [ $retry -lt $max_retries ]; do
-        //                         if kubectl apply -f $file --namespace ${K8S_NAMESPACE}; then
-        //                             echo "✅ $name applied successfully"
-        //                             return 0
-        //                         else
-        //                             retry=$((retry+1))
-        //                             if [ $retry -lt $max_retries ]; then
-        //                                 echo "⚠️ Attempt $retry failed, retrying in 5 seconds..."
-        //                                 sleep 5
-        //                             fi
-        //                         fi
-        //                     done
-        //                     
-        //                     echo "Failed to apply $name after $max_retries attempts"
-        //                     return 1
-        //                 }
-        //                 
-        //                 # Create namespace if it doesn't exist
-        //                 kubectl create namespace ${K8S_NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
-        //                 
-        //                 # Apply secrets first (if they exist)
-        //                 if [ -f k8s/secret.yaml ]; then
-        //                     echo "Applying secrets"
-        //                     kubectl apply -f k8s/secret.yaml --namespace ${K8S_NAMESPACE}
-        //                 fi
-        //                 
-        //                 # Apply PVC (persistent storage)
-        //                 echo " Applying PVC (10Mi)..."
-        //                 if [ -f k8s/pvc.yaml ]; then
-        //                     apply_with_retry "k8s/pvc.yaml" "PVC" || exit 1
-        //                 else
-        //                     echo " PVC file not found, skipping..."
-        //                 fi
-        //                 
-        //                 # Apply deployment
-        //                 echo "Applying deployment with image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
-        //                 apply_with_retry "k8s/deployment.yaml" "Deployment" || exit 1
-        //                 
-        //                 # Apply service (NodePort - free!)
-        //                 echo "Applying service (NodePort - no extra cost)..."
-        //                 if [ -f k8s/service.yaml ]; then
-        //                     apply_with_retry "k8s/service.yaml" "Service" || exit 1
-        //                 else
-        //                     echo "⚠️ Service file not found, skipping..."
-        //                 fi
-        //                 
-        //                 echo "✅ All Kubernetes resources applied successfully"
-        //                 
-        //                 # Show current resources
-        //                 echo "📊 Current pods:"
-        //                 kubectl get pods -n ${K8S_NAMESPACE} -l app=django-contact-app
-        //                 
-        //                 echo "Current services:"
-        //                 kubectl get services -n ${K8S_NAMESPACE}
-        //             '''
-        //         }
-        //     }
-        // }
+                    echo "🚀 Deploying to Azure Kubernetes Service..."
+                    
+                    sh '''
+                        # Function to apply with retry
+                        apply_with_retry() {
+                            local file=$1
+                            local name=$2
+                            local max_retries=3
+                            local retry=0
+                            
+                            echo "📄 Applying $name from $file..."
+                            
+                            while [ $retry -lt $max_retries ]; do
+                                if kubectl apply -f $file --namespace ${K8S_NAMESPACE}; then
+                                    echo "✅ $name applied successfully"
+                                    return 0
+                                else
+                                    retry=$((retry+1))
+                                    if [ $retry -lt $max_retries ]; then
+                                        echo "⚠️ Attempt $retry failed, retrying in 5 seconds..."
+                                        sleep 5
+                                    fi
+                                fi
+                            done
+                            
+                            echo "Failed to apply $name after $max_retries attempts"
+                            return 1
+                        }
+                        
+                        # Create namespace if it doesn't exist
+                        kubectl create namespace ${K8S_NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
+                        
+                        # Apply secrets first (if they exist)
+                        if [ -f k8s/secret.yaml ]; then
+                            echo "Applying secrets"
+                            kubectl apply -f k8s/secret.yaml --namespace ${K8S_NAMESPACE}
+                        fi
+                        
+                        # Apply PVC (persistent storage)
+                        echo " Applying PVC (10Mi)..."
+                        if [ -f k8s/pvc.yaml ]; then
+                            apply_with_retry "k8s/pvc.yaml" "PVC" || exit 1
+                        else
+                            echo " PVC file not found, skipping..."
+                        fi
+                        
+                        # Apply deployment
+                        echo "Applying deployment with image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
+                        apply_with_retry "k8s/deployment.yaml" "Deployment" || exit 1
+                        
+                        # Apply service (NodePort - free!)
+                        echo "Applying service (NodePort - no extra cost)..."
+                        if [ -f k8s/service.yaml ]; then
+                            apply_with_retry "k8s/service.yaml" "Service" || exit 1
+                        else
+                            echo "⚠️ Service file not found, skipping..."
+                        fi
+                        
+                        echo "✅ All Kubernetes resources applied successfully"
+                        
+                        # Show current resources
+                        echo "📊 Current pods:"
+                        kubectl get pods -n ${K8S_NAMESPACE} -l app=django-contact-app
+                        
+                        echo "Current services:"
+                        kubectl get services -n ${K8S_NAMESPACE}
+                    '''
+                }
+            }
+        }
 
-        // stage('Wait for AKS Rollout and Verify') {
-        //     steps {
-        //         script {
-        //             echo "⏳ Waiting for AKS deployment to be ready"
-        //             
-        //             sh '''
-        //                 # Show pod status during wait
-        //                 kubectl get pods -n ${K8S_NAMESPACE} -l app=django-contact-app -w &
-        //                 WATCH_PID=$!
-        //                 
-        //                 echo "Waiting for rollout to complete..."
-        //                 if kubectl rollout status deployment/${K8S_DEPLOYMENT} --namespace ${K8S_NAMESPACE} --timeout=300s; then
-        //                     kill $WATCH_PID 2>/dev/null || true
-        //                     echo "✅ Deployment rollout successful"
-        //                 else
-        //                     kill $WATCH_PID 2>/dev/null || true
-        //                     echo "❌ Deployment rollout failed"
-        //                     
-        //                     # Debug information
-        //                     POD_NAME=$(kubectl get pods -n ${K8S_NAMESPACE} -l app=django-contact-app -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
-        //                     if [ -n "$POD_NAME" ]; then
-        //                         echo "📋 Pod events:"
-        //                         kubectl describe pod $POD_NAME -n ${K8S_NAMESPACE} | grep -A 20 Events
-        //                         echo "📋 Init container logs:"
-        //                         kubectl logs $POD_NAME -c fix-permissions -n ${K8S_NAMESPACE} 2>/dev/null || echo "No fix-permissions logs"
-        //                         kubectl logs $POD_NAME -c migrate -n ${K8S_NAMESPACE} 2>/dev/null || echo "No migrate logs"
-        //                     fi
-        //                     exit 1
-        //                 fi
-        //             '''
+        stage('Wait for AKS Rollout and Verify') {
+            steps {
+                script {
+                    echo "⏳ Waiting for AKS deployment to be ready"
+                    
+                    sh '''
+                        # Show pod status during wait
+                        kubectl get pods -n ${K8S_NAMESPACE} -l app=django-contact-app -w &
+                        WATCH_PID=$!
+                        
+                        echo "Waiting for rollout to complete..."
+                        if kubectl rollout status deployment/${K8S_DEPLOYMENT} --namespace ${K8S_NAMESPACE} --timeout=300s; then
+                            kill $WATCH_PID 2>/dev/null || true
+                            echo "✅ Deployment rollout successful"
+                        else
+                            kill $WATCH_PID 2>/dev/null || true
+                            echo "❌ Deployment rollout failed"
+                            
+                            # Debug information
+                            POD_NAME=$(kubectl get pods -n ${K8S_NAMESPACE} -l app=django-contact-app -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+                            if [ -n "$POD_NAME" ]; then
+                                echo "📋 Pod events:"
+                                kubectl describe pod $POD_NAME -n ${K8S_NAMESPACE} | grep -A 20 Events
+                                echo "📋 Init container logs:"
+                                kubectl logs $POD_NAME -c fix-permissions -n ${K8S_NAMESPACE} 2>/dev/null || echo "No fix-permissions logs"
+                                kubectl logs $POD_NAME -c migrate -n ${K8S_NAMESPACE} 2>/dev/null || echo "No migrate logs"
+                            fi
+                            exit 1
+                        fi
+                    '''
 
-        //             echo "🔍 Verifying AKS deployment..."
-        //             
-        //             sh '''
-        //                 # Wait for old pods to terminate first
-        //                 sleep 10
-        //                 
-        //                 # Get the NEWEST running pod (sorted by creation time)
-        //                 POD_NAME=$(kubectl get pods -n default \
-        //                     -l app=django-contact-app \
-        //                     --sort-by=.metadata.creationTimestamp \
-        //                     -o jsonpath='{.items[-1].metadata.name}')
-        //                 
-        //                 if [ -z "$POD_NAME" ]; then
-        //                     echo "❌ No pod found!"
-        //                     exit 1
-        //                 fi
-        //                 
-        //                 echo "📦📦 Latest pod: $POD_NAME"
-        //                 
-        //                 # Wait until it's actually Running (up to 120s)
-        //                 echo "⏳ Waiting for pod to reach Running state..."
-        //                 for i in $(seq 1 24); do
-        //                     POD_STATUS=$(kubectl get pod $POD_NAME -n default -o jsonpath='{.status.phase}')
-        //                     echo "   Attempt $i/24 - Status: $POD_STATUS"
-        //                     
-        //                     if [ "$POD_STATUS" = "Running" ]; then
-        //                         echo "✅ Pod is Running!"
-        //                         break
-        //                     fi
-        //                     
-        //                     if [ $i -eq 24 ]; then
-        //                         echo "❌ Pod never reached Running state!"
-        //                         kubectl describe pod $POD_NAME -n default
-        //                         exit 1
-        //                     fi
-        //                     
-        //                     sleep 5
-        //                 done
-        //                 
-        //                 # Show recent logs
-        //                 echo "📋 Recent logs:"
-        //                 kubectl logs $POD_NAME -n default --tail=20
-        //             '''
-        //         }
-        //     }
-        // }
-        // stage('Restart Port Forward') {
-        //     steps {
-        //         script {
-        //             echo "🔄 Restarting port-forward service..."
-        //             sh '''
-        //                 sudo systemctl restart kubectl-port-forward
-        //                 sleep 5
-        //                 
-        //                 if systemctl is-active --quiet kubectl-port-forward; then
-        //                     echo "✅ Port-forward service is running"
-        //                 else
-        //                     echo "❌ Port-forward service failed to start!"
-        //                     sudo journalctl -u kubectl-port-forward --no-pager -n 20
-        //                     exit 1
-        //                 fi
-        //             '''
-        //         }
-        //     }
-        // }
-        // stage('Rollback on Failure') {
-        //     when {
-        //         expression { currentBuild.result == 'FAILURE' }
-        //     }
-        //     steps {
-        //         script {
-        //             echo "⚠️ Deployment failed! Rolling back to previous version..."
-        //             
-        //             sh '''
-        //                 echo "Undoing deployment..."
-        //                 kubectl rollout undo deployment/${K8S_DEPLOYMENT} --namespace ${K8S_NAMESPACE}
-        //                 
-        //                 echo "Waiting for rollback..."
-        //                 kubectl rollout status deployment/${K8S_DEPLOYMENT} --namespace ${K8S_NAMESPACE} --timeout=60s
-        //                 
-        //                 echo "✅ Rollback completed"
-        //                 
-        //                 # Show current pods after rollback
-        //                 kubectl get pods -n ${K8S_NAMESPACE} -l app=django-contact-app
-        //             '''
-        //             
-        //             echo "✅ Rollback finished"
-        //         }
-        //     }
-        // }
+                    echo "🔍 Verifying AKS deployment..."
+                    
+                    sh '''
+                        # Wait for old pods to terminate first
+                        sleep 10
+                        
+                        # Get the NEWEST running pod (sorted by creation time)
+                        POD_NAME=$(kubectl get pods -n default \
+                            -l app=django-contact-app \
+                            --sort-by=.metadata.creationTimestamp \
+                            -o jsonpath='{.items[-1].metadata.name}')
+                        
+                        if [ -z "$POD_NAME" ]; then
+                            echo "❌ No pod found!"
+                            exit 1
+                        fi
+                        
+                        echo "📦📦 Latest pod: $POD_NAME"
+                        
+                        # Wait until it's actually Running (up to 120s)
+                        echo "⏳ Waiting for pod to reach Running state..."
+                        for i in $(seq 1 24); do
+                            POD_STATUS=$(kubectl get pod $POD_NAME -n default -o jsonpath='{.status.phase}')
+                            echo "   Attempt $i/24 - Status: $POD_STATUS"
+                            
+                            if [ "$POD_STATUS" = "Running" ]; then
+                                echo "✅ Pod is Running!"
+                                break
+                            fi
+                            
+                            if [ $i -eq 24 ]; then
+                                echo "❌ Pod never reached Running state!"
+                                kubectl describe pod $POD_NAME -n default
+                                exit 1
+                            fi
+                            
+                            sleep 5
+                        done
+                        
+                        # Show recent logs
+                        echo "📋 Recent logs:"
+                        kubectl logs $POD_NAME -n default --tail=20
+                    '''
+                }
+            }
+        }
+        stage('Restart Port Forward') {
+            steps {
+                script {
+                    echo "🔄 Restarting port-forward service..."
+                    sh '''
+                        sudo systemctl restart kubectl-port-forward
+                        sleep 5
+                        
+                        if systemctl is-active --quiet kubectl-port-forward; then
+                            echo "✅ Port-forward service is running"
+                        else
+                            echo "❌ Port-forward service failed to start!"
+                            sudo journalctl -u kubectl-port-forward --no-pager -n 20
+                            exit 1
+                        fi
+                    '''
+                }
+            }
+        }
+        stage('Rollback on Failure') {
+            when {
+                expression { currentBuild.result == 'FAILURE' }
+            }
+            steps {
+                script {
+                    echo "⚠️ Deployment failed! Rolling back to previous version..."
+                    
+                    sh '''
+                        echo "Undoing deployment..."
+                        kubectl rollout undo deployment/${K8S_DEPLOYMENT} --namespace ${K8S_NAMESPACE}
+                        
+                        echo "Waiting for rollback..."
+                        kubectl rollout status deployment/${K8S_DEPLOYMENT} --namespace ${K8S_NAMESPACE} --timeout=60s
+                        
+                        echo "✅ Rollback completed"
+                        
+                        # Show current pods after rollback
+                        kubectl get pods -n ${K8S_NAMESPACE} -l app=django-contact-app
+                    '''
+                    
+                    echo "✅ Rollback finished"
+                }
+            }
+        }
 
     } 
 
@@ -907,4 +908,4 @@ fi
             }
         }
     }
-}
+} */

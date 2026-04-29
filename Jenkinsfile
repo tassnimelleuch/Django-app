@@ -755,7 +755,7 @@ fi
                         done
                         
                         # Show recent logs
-                        echo "📋 Recent logs:"
+                        echo "Recent logs:"
                         kubectl logs $POD_NAME -n default --tail=20
                     '''
                 }

@@ -592,7 +592,6 @@ fi
                 script {
                     echo "📝 Preparing Kubernetes manifests for AKS..."
                     
-                    // Update image tag in deployment
                     sh """
                         sed -i 's|image: tasnimelleuchenis/django-contact-app:.*|image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}|g' k8s/deployment.yaml
                         echo "✅ Updated deployment with new image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"

@@ -586,7 +586,7 @@ fi
         // ===================================================================
         
 
-        /*
+        
         stage('Prepare and Deploy to AKS') {
             steps {
                 script {
@@ -792,7 +792,7 @@ fi
                     echo "✅ Rollback finished"
                 }
             }
-        } */
+        } 
 
     } 
 

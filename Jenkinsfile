@@ -36,7 +36,6 @@ pipeline {
         GITHUB_OWNER = 'tassnimelleuch'
         SONAR_PROJECT_KEY = 'tassnimelleuch_Django-app'
         
-        // ===== AZURE AKS CONFIGURATION =====
         AZURE_RESOURCE_GROUP = 'aks-deployment'    
         AKS_CLUSTER_NAME = 'django-app'                   
         K8S_NAMESPACE = 'default'
@@ -592,11 +591,13 @@ fi
                 script {
                     echo "📝 Preparing Kubernetes manifests for AKS..."
                     
+                    // Update image tag in deployment
                     sh """
                         sed -i 's|image: tasnimelleuchenis/django-contact-app:.*|image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}|g' k8s/deployment.yaml
                         echo "✅ Updated deployment with new image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
                     """
                     
+                    // Show the updated image
                     sh "grep -A1 'image:' k8s/deployment.yaml | head -2"
 
                     echo "🚀 Deploying to Azure Kubernetes Service..."
@@ -790,7 +791,7 @@ fi
                     echo "✅ Rollback finished"
                 }
             }
-        }
+        } 
 
     } 
 

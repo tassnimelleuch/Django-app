@@ -36,6 +36,7 @@ pipeline {
         GITHUB_OWNER = 'tassnimelleuch'
         SONAR_PROJECT_KEY = 'tassnimelleuch_Django-app'
         
+        // ===== AZURE AKS CONFIGURATION =====
         AZURE_RESOURCE_GROUP = 'aks-deployment'    
         AKS_CLUSTER_NAME = 'django-app'                   
         K8S_NAMESPACE = 'default'
@@ -585,7 +586,7 @@ fi
         // ===================================================================
         
 
-        /*
+        
         stage('Prepare and Deploy to AKS') {
             steps {
                 script {
@@ -791,7 +792,7 @@ fi
                     echo "✅ Rollback finished"
                 }
             }
-        } */
+        }
 
     } 
 

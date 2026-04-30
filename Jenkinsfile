@@ -597,7 +597,6 @@ fi
                         echo "✅ Updated deployment with new image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
                     """
                     
-                    // Show the updated image
                     sh "grep -A1 'image:' k8s/deployment.yaml | head -2"
 
                     echo "🚀 Deploying to Azure Kubernetes Service..."

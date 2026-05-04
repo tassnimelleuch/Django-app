@@ -18,9 +18,9 @@ pipeline {
         
         DOCKER_IMAGE_TAG = sh(script: '''#!/bin/bash
             export LANG=C
-            echo "${BRANCH_NAME}-$(date "+%Y-%m-%d-at-%H-%M-%S")-build-${BUILD_NUMBER}" | tr '[:upper:]' '[:lower:]' | sed 's/ /-/g'
-    ''', returnStdout: true).trim()
-        
+            SAFE_BRANCH=$(echo "${BRANCH_NAME}" | tr '/' '-' | tr '[:upper:]' '[:lower:]')
+            echo "${SAFE_BRANCH}-$(date "+%Y-%m-%d-at-%H-%M-%S")-build-${BUILD_NUMBER}"
+        ''', returnStdout: true).trim()
         HUMAN_READABLE_DATE = sh(script: '''#!/bin/bash
             export LANG=C
             date "+%Y-%m-%d at %H:%M:%S"

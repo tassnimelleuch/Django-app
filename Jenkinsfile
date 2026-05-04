@@ -218,7 +218,7 @@ fi
                         withEnv([
                             "GITHUB_OWNER=${GITHUB_OWNER}",
                             "GITHUB_REPO=${GITHUB_REPO}",
-                            "GIT_COMMIT=${GIT_COMMIT}"
+                            "GIT_COMMIT=${env.CHANGE_SHA ?: GIT_COMMIT}"  // ← uses PR head SHA if available, falls back to GIT_COMMIT
                         ]) {
                             sh './check-sonarcloud.sh'
                         }
@@ -710,7 +710,7 @@ fi
                         fi
                     '''
 
-                    echo "🔍 Verifying AKS deployment..."
+                    echo " Verifying AKS deployment..."
                     
                     sh '''
                         # Wait for old pods to terminate first

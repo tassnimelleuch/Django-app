@@ -777,9 +777,11 @@ fi
             }
         }
         stage('Rollback on Failure') {
-              allOf {
-                branch 'main'
-                expression { currentBuild.result == 'FAILURE' }
+            when {
+                allOf {
+                    branch 'main'
+                    expression { currentBuild.result == 'FAILURE' }
+                }
             }
             steps {
                 script {

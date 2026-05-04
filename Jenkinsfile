@@ -18,8 +18,8 @@ pipeline {
         
         DOCKER_IMAGE_TAG = sh(script: '''#!/bin/bash
             export LANG=C
-            date "+%Y-%m-%d-at-%H-%M-%S-build-${BUILD_NUMBER}" | tr '[:upper:]' '[:lower:]' | sed 's/ /-/g'
-        ''', returnStdout: true).trim()
+            echo "${BRANCH_NAME}-$(date "+%Y-%m-%d-at-%H-%M-%S")-build-${BUILD_NUMBER}" | tr '[:upper:]' '[:lower:]' | sed 's/ /-/g'
+    ''', returnStdout: true).trim()
         
         HUMAN_READABLE_DATE = sh(script: '''#!/bin/bash
             export LANG=C
@@ -323,8 +323,13 @@ fi
                         }
                         
                         push_with_retry "${DOCKER_IMAGE_NAME}" "${DOCKER_IMAGE_TAG}" || exit 1
-                        push_with_retry "${DOCKER_IMAGE_NAME}" "latest" || exit 1
-                        
+
+                        if [ "${BRANCH_NAME}" = "main" ]; then
+                            echo "Main branch detected, pushing :latest tag..."
+                            push_with_retry "${DOCKER_IMAGE_NAME}" "latest" || exit 1
+                        else
+                            echo "Branch ${BRANCH_NAME} — skipping :latest push"
+                        fi
                         docker logout
                         
                         echo "✅✅✅ DOCKER PUSH COMPLETED SUCCESSFULLY! ✅✅✅"
@@ -588,6 +593,7 @@ fi
 
         
         stage('Prepare and Deploy to AKS') {
+            when { branch 'main' } 
             steps {
                 script {
                     echo "📝 Preparing Kubernetes manifests for AKS..."
@@ -673,6 +679,7 @@ fi
         }
 
         stage('Wait for AKS Rollout and Verify') {
+            when { branch 'main' } 
             steps {
                 script {
                     echo "⏳ Waiting for AKS deployment to be ready"
@@ -750,6 +757,7 @@ fi
             }
         }
         stage('Restart Port Forward') {
+            when { branch 'main' } 
             steps {
                 script {
                     echo "🔄 Restarting port-forward service..."
@@ -769,6 +777,7 @@ fi
             }
         }
         stage('Rollback on Failure') {
+            when { branch 'main' } 
             when {
                 expression { currentBuild.result == 'FAILURE' }
             }

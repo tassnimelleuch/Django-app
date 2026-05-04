@@ -18,8 +18,8 @@ pipeline {
         
         DOCKER_IMAGE_TAG = sh(script: '''#!/bin/bash
             export LANG=C
-            date "+%Y-%m-%d-at-%H-%M-%S-build-${BUILD_NUMBER}" | tr '[:upper:]' '[:lower:]' | sed 's/ /-/g'
-        ''', returnStdout: true).trim()
+            echo "${BRANCH_NAME}-$(date "+%Y-%m-%d-at-%H-%M-%S")-build-${BUILD_NUMBER}" | tr '[:upper:]' '[:lower:]' | sed 's/ /-/g'
+    ''', returnStdout: true).trim()
         
         HUMAN_READABLE_DATE = sh(script: '''#!/bin/bash
             export LANG=C
@@ -36,6 +36,7 @@ pipeline {
         GITHUB_OWNER = 'tassnimelleuch'
         SONAR_PROJECT_KEY = 'tassnimelleuch_Django-app'
         
+        // ===== AZURE AKS CONFIGURATION =====
         AZURE_RESOURCE_GROUP = 'aks-deployment'    
         AKS_CLUSTER_NAME = 'django-app'                   
         K8S_NAMESPACE = 'default'
@@ -217,7 +218,7 @@ fi
                         withEnv([
                             "GITHUB_OWNER=${GITHUB_OWNER}",
                             "GITHUB_REPO=${GITHUB_REPO}",
-                            "GIT_COMMIT=${GIT_COMMIT}"
+                            "GIT_COMMIT=${env.CHANGE_SHA ?: GIT_COMMIT}"  // ← uses PR head SHA if available, falls back to GIT_COMMIT
                         ]) {
                             sh './check-sonarcloud.sh'
                         }
@@ -322,8 +323,13 @@ fi
                         }
                         
                         push_with_retry "${DOCKER_IMAGE_NAME}" "${DOCKER_IMAGE_TAG}" || exit 1
-                        push_with_retry "${DOCKER_IMAGE_NAME}" "latest" || exit 1
-                        
+
+                        if [ "${BRANCH_NAME}" = "main" ]; then
+                            echo "Main branch detected, pushing :latest tag..."
+                            push_with_retry "${DOCKER_IMAGE_NAME}" "latest" || exit 1
+                        else
+                            echo "Branch ${BRANCH_NAME} — skipping :latest push"
+                        fi
                         docker logout
                         
                         echo "✅✅✅ DOCKER PUSH COMPLETED SUCCESSFULLY! ✅✅✅"
@@ -587,6 +593,7 @@ fi
 
         
         stage('Prepare and Deploy to AKS') {
+            when { branch 'main' } 
             steps {
                 script {
                     echo "📝 Preparing Kubernetes manifests for AKS..."
@@ -672,6 +679,7 @@ fi
         }
 
         stage('Wait for AKS Rollout and Verify') {
+            when { branch 'main' } 
             steps {
                 script {
                     echo "⏳ Waiting for AKS deployment to be ready"
@@ -702,7 +710,7 @@ fi
                         fi
                     '''
 
-                    echo "🔍 Verifying AKS deployment..."
+                    echo " Verifying AKS deployment..."
                     
                     sh '''
                         # Wait for old pods to terminate first
@@ -749,6 +757,7 @@ fi
             }
         }
         stage('Restart Port Forward') {
+            when { branch 'main' } 
             steps {
                 script {
                     echo "🔄 Restarting port-forward service..."
@@ -769,7 +778,10 @@ fi
         }
         stage('Rollback on Failure') {
             when {
-                expression { currentBuild.result == 'FAILURE' }
+                allOf {
+                    branch 'main'
+                    expression { currentBuild.result == 'FAILURE' }
+                }
             }
             steps {
                 script {

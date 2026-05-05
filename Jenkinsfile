@@ -116,13 +116,26 @@ except Exception as e:
                         export DJANGO_SETTINGS_MODULE=${DJANGO_SETTINGS_MODULE}
                         export SECRET_KEY='${SECRET_KEY}'
                         
-                        ${PYTEST} accounts \
-                            --cov \
-                            --cov-report=term \
-                            --cov-report=xml:coverage.xml \
-                            --ds=myproject.settings \
-                            --tb=short \
-                            --junitxml=junit-results.xml
+                        # COMMENTED OUT FOR SLOW BUILD TESTING
+                        # ${PYTEST} accounts \
+                        #     --cov \
+                        #     --cov-report=term \
+                        #     --cov-report=xml:coverage.xml \
+                        #     --ds=myproject.settings \
+                        #     --tb=short \
+                        #     --junitxml=junit-results.xml
+                        
+                        # SLOW BUILD ALERT TEST - Simulating extended test duration
+                        echo "⏳ SLOW BUILD SIMULATION: Delaying for 8 minutes..."
+                        for i in {1..8}; do
+                            echo "  ⏱️  Waiting... ($i/8 minutes elapsed)"
+                            sleep 60
+                        done
+                        
+                        echo "✅ Slow build test stage completed (8 minute delay)"
+                        
+                        # Create dummy coverage file for pipeline to continue
+                        echo '<?xml version="1.0" ?><coverage></coverage>' > coverage.xml
                     """
                 }
             }

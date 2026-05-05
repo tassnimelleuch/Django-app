@@ -112,7 +112,7 @@ except Exception as e:
                 script {
                     echo "🧪 Running Pytest with coverage..."
                     
-                    sh """
+                    sh '''
                         export DJANGO_SETTINGS_MODULE=${DJANGO_SETTINGS_MODULE}
                         export SECRET_KEY='${SECRET_KEY}'
                         
@@ -125,18 +125,25 @@ except Exception as e:
                         #     --tb=short \
                         #     --junitxml=junit-results.xml
                         
-                        # SLOW BUILD ALERT TEST - Simulating extended test duration
-                        echo "⏳ SLOW BUILD SIMULATION: Delaying for 8 minutes..."
-                        for i in {1..8}; do
-                            echo "  ⏱️  Waiting... ($i/8 minutes elapsed)"
+                        # SLOW BUILD ALERT TEST - Simulating extended test duration (15 minutes)
+                        echo "⏳ SLOW BUILD SIMULATION: Running for 15 minutes..."
+                        START_TIME=$(date +%s)
+                        
+                        i=0
+                        while [ $i -lt 15 ]; do
+                            i=$((i + 1))
+                            echo "  ⏱️  Elapsed: $i/15 minutes - Still processing tests..."
                             sleep 60
                         done
                         
-                        echo "✅ Slow build test stage completed (8 minute delay)"
+                        END_TIME=$(date +%s)
+                        DURATION=$((END_TIME - START_TIME))
+                        echo "✅ Slow build stage completed after $((DURATION / 60)) minutes and $((DURATION % 60)) seconds"
                         
                         # Create dummy coverage file for pipeline to continue
                         echo '<?xml version="1.0" ?><coverage></coverage>' > coverage.xml
-                    """
+                        echo "✅ Coverage report generated"
+                    '''
                 }
             }
         }

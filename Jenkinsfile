@@ -234,10 +234,10 @@ fi
                 }
             }
         }
-        stage('Wait 4 Minutes') {
+        stage('Wait 5 Minutes') {
             steps {
-                echo 'Waiting for 4 minutes...'
-                sleep(time: 4, unit: 'MINUTES')
+                echo 'Waiting for 5 minutes...'
+                sleep(time: 5, unit: 'MINUTES')
             }
         }
         stage('Docker Image Build') {

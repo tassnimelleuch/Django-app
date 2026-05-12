@@ -234,12 +234,7 @@ fi
                 }
             }
         }
-        stage('Wait 2 Minutes') {
-            steps {
-                echo 'Waiting for 4 minutes...'
-                sleep(time: 4, unit: 'MINUTES')
-            }
-        }
+
         stage('Docker Image Build') {
             when {
                 expression { fileExists('Dockerfile') }

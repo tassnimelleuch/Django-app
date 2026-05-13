@@ -56,7 +56,7 @@ pipeline {
                 script {
                     echo " Build: ${HUMAN_READABLE_DATE} (#${BUILD_NUMBER})"
                     echo "🐳 Docker tag: ${DOCKER_IMAGE_TAG}"
-                    echo "🔍 Commit: ${GIT_COMMIT}"
+                    echo " Commit: ${GIT_COMMIT}"
                 }
             }
         }
@@ -234,7 +234,7 @@ fi
                 }
             }
         }
-        
+
         stage('Docker Image Build') {
             when {
                 expression { fileExists('Dockerfile') }
@@ -408,13 +408,13 @@ fi
                                 else
                                     retry=$((retry+1))
                                     if [ $retry -lt $max_retries ]; then
-                                        echo "⚠️ Attempt $retry failed, retrying in 5 seconds..."
+                                        echo " Attempt $retry failed, retrying in 5 seconds..."
                                         sleep 5
                                     fi
                                 fi
                             done
                             
-                            echo "❌ Failed to apply $name after $max_retries attempts"
+                            echo " Failed to apply $name after $max_retries attempts"
                             return 1
                         }
                         

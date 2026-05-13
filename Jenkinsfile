@@ -537,7 +537,7 @@ fi
                             HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 $MINIKUBE_URL || echo "Failed")
                             
                             if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "302" ] || [ "$HTTP_CODE" = "301" ]; then
-                                echo "✅ Application responded with HTTP $HTTP_CODE"
+                                echo " Application responded with HTTP $HTTP_CODE"
                             else
                                 echo "⚠️ Application returned HTTP $HTTP_CODE - may need investigation"
                             fi
@@ -590,8 +590,8 @@ fi
         // AZURE AKS DEPLOYMENT STAGES 
         // ===================================================================
         
-
-        
+        //this line is only to see the files changements in the pipeline
+        //test
         stage('Prepare and Deploy to AKS') {
             when { branch 'main' } 
             steps {

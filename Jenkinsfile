@@ -590,8 +590,7 @@ fi
         // AZURE AKS DEPLOYMENT STAGES 
         // ===================================================================
         
-        //this line is only to see the files changements in the pipeline
-        //test
+   
         stage('Prepare and Deploy to AKS') {
             when { branch 'main' } 
             steps {

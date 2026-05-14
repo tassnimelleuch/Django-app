@@ -115,56 +115,6 @@ spec:
         app: django-contact-app
     spec:
       automountServiceAccountToken: false  
-      
-      initContainers:
-        - name: fix-permissions
-          image: busybox:1.36.1          
-          imagePullPolicy: IfNotPresent  
-          command: ['sh', '-c']
-          args:
-            - |
-              echo "Creating database directory..."
-              mkdir -p /data
-              touch /data/db.sqlite3
-              chmod 666 /data/db.sqlite3
-              ls -la /data/
-              echo "Done!"
-          volumeMounts:
-            - name: django-db
-              mountPath: /data
-
-        - name: migrate
-          image: tasnimelleuchenis/django-contact-app:latest  
-          imagePullPolicy: Always                             
-          command: ["sh", "-c"]
-          args:
-            - |
-              echo "Running migrations..."
-              # S'assurer que le fichier existe
-              touch /app/db.sqlite3
-              python manage.py migrate --noinput
-              echo "Migrations completed!"
-          env:
-            - name: DEBUG
-              value: "False"
-            - name: ALLOWED_HOSTS
-              value: "localhost,127.0.0.1,172.17.0.2,51.103.56.25"
-            - name: SECRET_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: django-secrets
-                  key: secret-key
-          volumeMounts:
-            - name: django-db
-              mountPath: /app/db.sqlite3
-              subPath: db.sqlite3
-          resources:
-            limits:
-              memory: "256Mi"
-              ephemeral-storage: "500Mi"
-            requests:
-              memory: "128Mi"
-              ephemeral-storage: "200Mi"
 
       containers:
         - name: django-contact-app
@@ -182,27 +132,11 @@ spec:
                 secretKeyRef:
                   name: django-secrets
                   key: secret-key
-          command: ["sh", "-c"]
-          args:
-            - |
-              echo "Waiting for database..."
-              # Vérifier que la base de données existe
-              if [ -f /app/db.sqlite3 ]; then
-                echo "Database found, size: $(ls -lh /app/db.sqlite3 | awk '{print $5}')"
-              else
-                echo "Database not found, creating..."
-                touch /app/db.sqlite3
-              fi
-              
-              echo "Starting Gunicorn..."
-              exec gunicorn myproject.wsgi:application \
-                --bind 0.0.0.0:8000 \
-                --workers 1 \
-                --timeout 120
+            - name: SQLITE_DB_PATH
+              value: "/data/db.sqlite3"
           volumeMounts:
             - name: django-db
-              mountPath: /app/db.sqlite3
-              subPath: db.sqlite3
+              mountPath: /data
           resources:  
             limits:
               memory: "512Mi"

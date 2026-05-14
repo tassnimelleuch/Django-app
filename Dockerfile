@@ -6,10 +6,6 @@ ENV DJANGO_SETTINGS_MODULE=myproject.settings
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y \
-    sqlite3 \
-    && rm -rf /var/lib/apt/lists/*
-
 COPY requirements.txt .
 RUN pip install --upgrade pip && pip install -r requirements.txt
 

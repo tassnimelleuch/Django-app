@@ -850,29 +850,38 @@ fi
             echo "📊 SonarCloud results: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
 
             script {
-                def COMMITTER_EMAIL = sh(
+                def committerEmail = sh(
                     script: "git log -1 --pretty=format:'%ae'",
                     returnStdout: true
                 ).trim()
 
-                def TRIGGERED_BY = currentBuild.getBuildCauses('hudson.model.UserIdCause')
+                def triggeredByUser = currentBuild.getBuildCauses('hudson.model.UserIdCause')
+                def recipients = []
 
-                def recipient
-                if (TRIGGERED_BY) {
+                if (triggeredByUser) {
                     wrap([$class: 'BuildUser']) {
-                        recipient = env.BUILD_USER_EMAIL
+                        if (env.BUILD_USER_EMAIL?.trim()) {
+                            recipients << env.BUILD_USER_EMAIL.trim()
+                        }
                     }
-                } else {
-                    recipient = COMMITTER_EMAIL
                 }
 
+                if (committerEmail) {
+                    recipients << committerEmail
+                }
+
+                def recipientList = recipients.findAll { it?.trim() && it != 'null' }.unique().join(', ')
+                echo "📧 Failure notification recipients: ${recipientList ?: 'email-ext recipient providers'}"
+
                 emailext(
-                    to: "${recipient}",
+                    to: recipientList,
+                    recipientProviders: [requestor(), developers(), culprits()],
                     subject: "❌ Jenkins FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
                     body: """
     Build failed.
 
     Job: ${env.JOB_NAME}
+    Branch: ${env.BRANCH_NAME}
     Build number: ${env.BUILD_NUMBER}
     Build URL: ${env.BUILD_URL}
     Date: ${HUMAN_READABLE_DATE}
@@ -885,29 +894,38 @@ fi
 
         fixed {
             script {
-                def COMMITTER_EMAIL = sh(
+                def committerEmail = sh(
                     script: "git log -1 --pretty=format:'%ae'",
                     returnStdout: true
                 ).trim()
 
-                def TRIGGERED_BY = currentBuild.getBuildCauses('hudson.model.UserIdCause')
+                def triggeredByUser = currentBuild.getBuildCauses('hudson.model.UserIdCause')
+                def recipients = []
 
-                def recipient
-                if (TRIGGERED_BY) {
+                if (triggeredByUser) {
                     wrap([$class: 'BuildUser']) {
-                        recipient = env.BUILD_USER_EMAIL
+                        if (env.BUILD_USER_EMAIL?.trim()) {
+                            recipients << env.BUILD_USER_EMAIL.trim()
+                        }
                     }
-                } else {
-                    recipient = COMMITTER_EMAIL
                 }
 
+                if (committerEmail) {
+                    recipients << committerEmail
+                }
+
+                def recipientList = recipients.findAll { it?.trim() && it != 'null' }.unique().join(', ')
+                echo "📧 Fixed notification recipients: ${recipientList ?: 'email-ext recipient providers'}"
+
                 emailext(
-                    to: "${recipient}",
+                    to: recipientList,
+                    recipientProviders: [requestor(), developers(), culprits()],
                     subject: "✅ Jenkins FIXED: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
                     body: """
     The pipeline is successful again after previous failure(s).
 
     Job: ${env.JOB_NAME}
+    Branch: ${env.BRANCH_NAME}
     Build number: ${env.BUILD_NUMBER}
     Build URL: ${env.BUILD_URL}
     Date: ${HUMAN_READABLE_DATE}

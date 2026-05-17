@@ -1,9 +1,7 @@
-# Runtime dependencies
 Django==5.2.11
 gunicorn
 python-dotenv==1.2.1
 
-# Test and lint dependencies used by Jenkins
 pylint==4.0.4
 pylint-django==2.7.0
 pytest==9.0.2

@@ -822,6 +822,8 @@ fi
 
             script {
                 def VM_PUBLIC_IP = "51.103.56.25"
+                def previousBuild = currentBuild.getPreviousBuild()
+                def previousResult = previousBuild?.getResult()
 
                 def NODE_PORT = sh(
                     script: "kubectl get service ${K8S_SERVICE} -n ${K8S_NAMESPACE} -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo '30000'",
@@ -841,6 +843,50 @@ fi
                 echo ""
                 echo "📊 View on Docker Hub: https://hub.docker.com/r/${env.DOCKER_IMAGE_NAME}/tags"
                 echo "📊 View on SonarCloud: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
+
+                if (previousResult in ['FAILURE', 'UNSTABLE', 'ABORTED']) {
+                    def committerEmail = sh(
+                        script: "git log -1 --pretty=format:'%ae'",
+                        returnStdout: true
+                    ).trim()
+
+                    def triggeredByUser = currentBuild.getBuildCauses('hudson.model.UserIdCause')
+                    def recipients = []
+
+                    if (triggeredByUser) {
+                        wrap([$class: 'BuildUser']) {
+                            if (env.BUILD_USER_EMAIL?.trim()) {
+                                recipients << env.BUILD_USER_EMAIL.trim()
+                            }
+                        }
+                    }
+
+                    if (committerEmail) {
+                        recipients << committerEmail
+                    }
+
+                    def recipientList = recipients.findAll { it?.trim() && it != 'null' }.unique().join(', ')
+                    echo "📧 Recovery notification recipients: ${recipientList ?: 'email-ext recipient providers'}"
+                    echo "📧 Previous build result was ${previousResult}, sending recovery email"
+
+                    emailext(
+                        to: recipientList,
+                        recipientProviders: [requestor(), developers(), culprits()],
+                        subject: "✅ Jenkins RECOVERED: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                        body: """
+    The pipeline is successful again after a previous ${previousResult.toLowerCase()} build.
+
+    Job: ${env.JOB_NAME}
+    Branch: ${env.BRANCH_NAME}
+    Build number: ${env.BUILD_NUMBER}
+    Build URL: ${env.BUILD_URL}
+    Date: ${HUMAN_READABLE_DATE}
+    Previous result: ${previousResult}
+    """
+                    )
+                } else {
+                    echo "ℹ️ Previous build result was ${previousResult ?: 'none'} - skipping recovery email"
+                }
             }
         }
 
@@ -892,46 +938,5 @@ fi
             }
         }
 
-        fixed {
-            script {
-                def committerEmail = sh(
-                    script: "git log -1 --pretty=format:'%ae'",
-                    returnStdout: true
-                ).trim()
-
-                def triggeredByUser = currentBuild.getBuildCauses('hudson.model.UserIdCause')
-                def recipients = []
-
-                if (triggeredByUser) {
-                    wrap([$class: 'BuildUser']) {
-                        if (env.BUILD_USER_EMAIL?.trim()) {
-                            recipients << env.BUILD_USER_EMAIL.trim()
-                        }
-                    }
-                }
-
-                if (committerEmail) {
-                    recipients << committerEmail
-                }
-
-                def recipientList = recipients.findAll { it?.trim() && it != 'null' }.unique().join(', ')
-                echo "📧 Fixed notification recipients: ${recipientList ?: 'email-ext recipient providers'}"
-
-                emailext(
-                    to: recipientList,
-                    recipientProviders: [requestor(), developers(), culprits()],
-                    subject: "✅ Jenkins FIXED: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                    body: """
-    The pipeline is successful again after previous failure(s).
-
-    Job: ${env.JOB_NAME}
-    Branch: ${env.BRANCH_NAME}
-    Build number: ${env.BUILD_NUMBER}
-    Build URL: ${env.BUILD_URL}
-    Date: ${HUMAN_READABLE_DATE}
-    """
-                )
-            }
-        }
     }
 }

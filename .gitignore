@@ -38,4 +38,4 @@ htmlcov/
 .coverage
 
 
-pylint-report.txt
+pylint-report.json

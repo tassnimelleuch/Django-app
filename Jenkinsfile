@@ -133,11 +133,12 @@ except Exception as e:
                 script {
                     echo "🔍 Running Pylint..."
                     sh """
+                        mkdir -p test-reports
                         ${PYLINT} accounts \
-                            --output-format=json:pylint-report.json \
+                            --output-format=json:test-reports/pylint-report.json \
                             --exit-zero || echo "Pylint analysis completed"
                         
-                        if [ -f pylint-report.json ]; then
+                        if [ -f test-reports/pylint-report.json ]; then
                             echo "✅ Pylint report created successfully"
                         else
                             echo "⚠️ Pylint report not created"
@@ -807,10 +808,11 @@ fi
 
     post {
         always {
-            archiveArtifacts artifacts: 'coverage.xml, junit-results.xml, sonar-check.json, pylint-report.json', allowEmptyArchive: true
+            archiveArtifacts artifacts: 'coverage.xml, junit-results.xml, sonar-check.json, test-reports/pylint-report.json', allowEmptyArchive: true
             sh '''
                 rm -rf ${VENV_DIR} || true
-                rm -f coverage.xml junit-results.xml  sonar-check.json init_django.py check-sonarcloud.sh full-response.json sonarcloud-status.txt || true
+                rm -rf test-reports || true
+                rm -f coverage.xml junit-results.xml sonar-check.json init_django.py check-sonarcloud.sh full-response.json sonarcloud-status.txt || true
             '''
             echo "✅ Pipeline execution completed"
         }

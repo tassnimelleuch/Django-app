@@ -36,3 +36,6 @@ staticfiles/
 coverage/
 htmlcov/
 .coverage
+
+
+pylint-report.txt

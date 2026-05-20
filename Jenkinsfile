@@ -202,7 +202,7 @@ if grep -i "sonarcloud" full-response.json > /dev/null; then
             exit 1
             ;;
         *)
-            echo "⚠️ SonarCloud status: $CONCLUSION"
+            echo "SonarCloud status: $CONCLUSION"
             ;;
     esac
 else

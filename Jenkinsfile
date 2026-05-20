@@ -291,7 +291,7 @@ fi
                 }
                 steps {
                     script {
-                    echo "📤 Pushing Docker images to Docker Hub..."
+                    echo "Pushing Docker images to Docker Hub..."
                     
                     sh '''
                         echo "Logging into Docker Hub..."

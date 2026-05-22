@@ -131,8 +131,8 @@ except Exception as e:
         stage('Pylint Code Analysis') {
             steps {
                 script {
-                    echo "⏳ Waiting 3 minutes before running Pylint for testing..."
-                    sleep time: 3, unit: 'MINUTES'
+                    echo " Pylint testing..."
+                    '
                     sh """
                         mkdir -p test-reports
                         ${PYLINT} accounts \

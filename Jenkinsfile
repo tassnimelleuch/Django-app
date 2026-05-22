@@ -132,7 +132,6 @@ except Exception as e:
             steps {
                 script {
                     echo " Pylint testing..."
-                    '
                     sh """
                         mkdir -p test-reports
                         ${PYLINT} accounts \

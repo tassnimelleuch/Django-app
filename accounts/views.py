@@ -206,4 +206,3 @@ def delete_phone(request, phone_id):
 
 #test 
 # This line is only to see the files changements in the pipeline
-password = "testpassword123"

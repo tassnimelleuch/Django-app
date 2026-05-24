@@ -1,28 +1,3 @@
-def notifyDashboard(script, eventType, extra = [:]) {
-    def payload = groovy.json.JsonOutput.toJson([
-        event_type  : eventType,
-        job_path    : script.env.JOB_NAME,
-        branch_name : script.env.BRANCH_NAME ?: 'main',
-        build_number: script.env.BUILD_NUMBER,
-        build_url   : script.env.BUILD_URL,
-        commit_sha  : script.env.CHANGE_SHA ?: script.env.GIT_COMMIT
-    ] + extra)
-
-    try {
-        script.httpRequest(
-            httpMode: 'POST',
-            url: 'https://granolithic-multifurcate-evie.ngrok-free.dev/api/webhooks/jenkins',
-            contentType: 'APPLICATION_JSON',
-            customHeaders: [[name: 'Authorization', value: 'Bearer my-jenkins-secret-123']],
-            requestBody: payload,
-            validResponseCodes: '200:299'
-        )
-        script.echo "Dashboard webhook sent: ${eventType}"
-    } catch (err) {
-        script.echo "Dashboard webhook failed for ${eventType}: ${err.message}"
-    }
-}
-
 pipeline {
     agent any
     
@@ -82,11 +57,6 @@ pipeline {
                     echo " Build: ${HUMAN_READABLE_DATE} (#${BUILD_NUMBER})"
                     echo "🐳 Docker tag: ${DOCKER_IMAGE_TAG}"
                     echo " Commit: ${GIT_COMMIT}"
-                    notifyDashboard(this, 'build_started', [
-                        build_status    : 'STARTED',
-                        docker_image_tag: env.DOCKER_IMAGE_TAG,
-                        started_at      : env.HUMAN_READABLE_DATE
-                    ])
                 }
             }
         }
@@ -876,15 +846,6 @@ fi
                 echo "📊 View on Docker Hub: https://hub.docker.com/r/${env.DOCKER_IMAGE_NAME}/tags"
                 echo "📊 View on SonarCloud: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
 
-                notifyDashboard(this, 'build_succeeded', [
-                    build_status    : 'SUCCESS',
-                    docker_image    : env.DOCKER_IMAGE_NAME,
-                    docker_image_tag: env.DOCKER_IMAGE_TAG,
-                    deployed_url    : "http://${VM_PUBLIC_IP}:8000",
-                    node_port_url   : "http://${VM_PUBLIC_IP}:${NODE_PORT}",
-                    finished_at     : env.HUMAN_READABLE_DATE
-                ])
-
                 if (previousResult in ['FAILURE', 'UNSTABLE', 'ABORTED']) {
                     def committerEmail = sh(
                         script: "git log -1 --pretty=format:'%ae'",
@@ -937,12 +898,6 @@ fi
             echo "📊 SonarCloud results: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
 
             script {
-                notifyDashboard(this, 'build_failed', [
-                    build_status: 'FAILURE',
-                    finished_at : env.HUMAN_READABLE_DATE,
-                    sonarcloud_url: "https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
-                ])
-
                 def committerEmail = sh(
                     script: "git log -1 --pretty=format:'%ae'",
                     returnStdout: true

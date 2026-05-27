@@ -115,10 +115,12 @@ except Exception as e:
                     sh """
                         export DJANGO_SETTINGS_MODULE=${DJANGO_SETTINGS_MODULE}
                         export SECRET_KEY='${SECRET_KEY}'
+
+                        rm -f .coverage coverage.xml
                         
                         ${PYTEST} accounts \
-                            --cov \
-                            --cov-report=term \
+                            --cov=accounts \
+                            --cov-report=term-missing \
                             --cov-report=xml:coverage.xml \
                             --ds=myproject.settings \
                             --tb=short \

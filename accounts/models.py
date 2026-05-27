@@ -16,12 +16,6 @@ class Contact(models.Model):
     def __str__(self):
         return f"{self.first_name} {self.last_name}"
 
-    def contact_summary(self):
-        """Return a compact summary string for contact displays."""
-        email = self.email or 'no-email'
-        profile = 'linkedin' if self.linkedin else 'no-linkedin'
-        return f"{self.first_name} {self.last_name} | {email} | {profile}"
-
 
 class PhoneNumber(models.Model):
     """Model representing a phone number associated with a contact."""

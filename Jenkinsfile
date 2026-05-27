@@ -596,14 +596,13 @@ fi
             when { branch 'main' } 
             steps {
                 script {
-                    echo "📝 Preparing Kubernetes manifests for AKS..."
+                    echo " Preparing Kubernetes manifests for AKS..."
                     
                     sh """
                         sed -i 's|image: tasnimelleuchenis/django-contact-app:.*|image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}|g' k8s/deployment.yaml
-                        echo "✅ Updated deployment with new image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
+                        echo " Updated deployment with new image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
                     """
                     
-                    // Show the updated image
                     sh "grep -A1 'image:' k8s/deployment.yaml | head -2"
 
                     echo "🚀 Deploying to Azure Kubernetes Service..."

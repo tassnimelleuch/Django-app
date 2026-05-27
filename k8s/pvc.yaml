@@ -9,4 +9,3 @@ spec:
     requests:
       storage: 10Mi #50 minikube 10 azure
   storageClassName: managed-csi # from "standard" minikube to "managed-csi" azure
-  #test

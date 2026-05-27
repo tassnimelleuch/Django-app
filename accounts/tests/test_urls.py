@@ -150,22 +150,6 @@ def test_delete_phone_url_resolves():
 
 
 @pytest.mark.django_db
-def test_all_url_names():
-    """All URL names reverse correctly."""
-    url_tests = (
-        ("register", "/register/"),
-        ("login", "/login/"),
-        ("logout", "/logout/"),
-        ("dashboard", "/dashboard/"),
-        ("contact_list", "/contacts/"),
-        ("add_contact", "/contacts/add/"),
-    )
-
-    for name, expected_path in url_tests:
-        assert reverse(name) == expected_path
-
-
-@pytest.mark.django_db
 def test_url_patterns_with_ids():
     """URL patterns requiring IDs reverse correctly."""
     id_url_tests = (

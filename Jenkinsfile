@@ -1,3 +1,40 @@
+def getResponsibleCommitSha() {
+    return env.CHANGE_SHA?.trim() ? env.CHANGE_SHA.trim() : env.GIT_COMMIT?.trim()
+}
+
+def getResponsibleCommitEmail() {
+    def commitSha = getResponsibleCommitSha()
+
+    if (!commitSha) {
+        return ''
+    }
+
+    return sh(
+        script: "git show -s --format='%ae' '${commitSha}'",
+        returnStdout: true
+    ).trim()
+}
+
+def getLastRelevantBuildResult() {
+    def previousBuild = currentBuild.getPreviousBuild()
+
+    while (previousBuild) {
+        def result = previousBuild.getResult()?.toString()
+
+        if (result && !(result in ['ABORTED', 'NOT_BUILT'])) {
+            return result
+        }
+
+        previousBuild = previousBuild.getPreviousBuild()
+    }
+
+    return null
+}
+
+def getPreviousBuildResult() {
+    return currentBuild.getPreviousBuild()?.getResult()?.toString()
+}
+
 pipeline {
     agent any
     
@@ -825,8 +862,8 @@ fi
 
             script {
                 def VM_PUBLIC_IP = "51.103.56.25"
-                def previousBuild = currentBuild.getPreviousBuild()
-                def previousResult = previousBuild?.getResult()
+                def previousBuildResult = getPreviousBuildResult()
+                def previousResult = getLastRelevantBuildResult()
 
                 def NODE_PORT = sh(
                     script: "kubectl get service ${K8S_SERVICE} -n ${K8S_NAMESPACE} -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo '30000'",
@@ -847,48 +884,36 @@ fi
                 echo "📊 View on Docker Hub: https://hub.docker.com/r/${env.DOCKER_IMAGE_NAME}/tags"
                 echo "📊 View on SonarCloud: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
 
-                if (previousResult in ['FAILURE', 'UNSTABLE', 'ABORTED']) {
-                    def committerEmail = sh(
-                        script: "git log -1 --pretty=format:'%ae'",
-                        returnStdout: true
-                    ).trim()
-
-                    def triggeredByUser = currentBuild.getBuildCauses('hudson.model.UserIdCause')
-                    def recipients = []
-
-                    if (triggeredByUser) {
-                        wrap([$class: 'BuildUser']) {
-                            if (env.BUILD_USER_EMAIL?.trim()) {
-                                recipients << env.BUILD_USER_EMAIL.trim()
-                            }
-                        }
-                    }
+                if (previousBuildResult == 'FAILURE') {
+                    def committerEmail = getResponsibleCommitEmail()
 
                     if (committerEmail) {
-                        recipients << committerEmail
-                    }
+                        echo "📧 Recovery notification recipient: ${committerEmail}"
+                        echo "📧 Previous build result was ${previousBuildResult}, sending recovery email"
 
-                    def recipientList = recipients.findAll { it?.trim() && it != 'null' }.unique().join(', ')
-                    echo "📧 Recovery notification recipients: ${recipientList ?: 'email-ext recipient providers'}"
-                    echo "📧 Previous build result was ${previousResult}, sending recovery email"
-
-                    emailext(
-                        to: recipientList,
-                        recipientProviders: [requestor(), developers(), culprits()],
-                        subject: "✅ Jenkins RECOVERED: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                        body: """
-    The pipeline is successful again after a previous ${previousResult.toLowerCase()} build.
+                        emailext(
+                            to: committerEmail,
+                            subject: "✅ Jenkins RECOVERED: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                            body: """
+    The pipeline is successful again after a previous ${previousBuildResult.toLowerCase()} build.
 
     Job: ${env.JOB_NAME}
     Branch: ${env.BRANCH_NAME}
     Build number: ${env.BUILD_NUMBER}
     Build URL: ${env.BUILD_URL}
     Date: ${HUMAN_READABLE_DATE}
-    Previous result: ${previousResult}
+    Commit: ${getResponsibleCommitSha()}
+    Previous result: ${previousBuildResult}
     """
-                    )
+                        )
+                    } else {
+                        echo "⚠️ No commit author email found - skipping recovery email"
+                    }
+                } else if (previousBuildResult in ['ABORTED', 'NOT_BUILT']) {
+                    echo "ℹ️ Previous build result was ${previousBuildResult}; skipping recovery email"
+                    echo "ℹ️ Last relevant non-aborted result was ${previousResult ?: 'none'}"
                 } else {
-                    echo "ℹ️ Previous build result was ${previousResult ?: 'none'} - skipping recovery email"
+                    echo "ℹ️ Previous build result was ${previousBuildResult ?: 'none'} - skipping recovery email"
                 }
             }
         }
@@ -899,34 +924,15 @@ fi
             echo "📊 SonarCloud results: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
 
             script {
-                def committerEmail = sh(
-                    script: "git log -1 --pretty=format:'%ae'",
-                    returnStdout: true
-                ).trim()
-
-                def triggeredByUser = currentBuild.getBuildCauses('hudson.model.UserIdCause')
-                def recipients = []
-
-                if (triggeredByUser) {
-                    wrap([$class: 'BuildUser']) {
-                        if (env.BUILD_USER_EMAIL?.trim()) {
-                            recipients << env.BUILD_USER_EMAIL.trim()
-                        }
-                    }
-                }
+                def committerEmail = getResponsibleCommitEmail()
 
                 if (committerEmail) {
-                    recipients << committerEmail
-                }
+                    echo "📧 Failure notification recipient: ${committerEmail}"
 
-                def recipientList = recipients.findAll { it?.trim() && it != 'null' }.unique().join(', ')
-                echo "📧 Failure notification recipients: ${recipientList ?: 'email-ext recipient providers'}"
-
-                emailext(
-                    to: recipientList,
-                    recipientProviders: [requestor(), developers(), culprits()],
-                    subject: "❌ Jenkins FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                    body: """
+                    emailext(
+                        to: committerEmail,
+                        subject: "❌ Jenkins FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                        body: """
     Build failed.
 
     Job: ${env.JOB_NAME}
@@ -934,10 +940,13 @@ fi
     Build number: ${env.BUILD_NUMBER}
     Build URL: ${env.BUILD_URL}
     Date: ${HUMAN_READABLE_DATE}
-    Commit: ${GIT_COMMIT}
+    Commit: ${getResponsibleCommitSha()}
     SonarCloud: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}
     """
-                )
+                    )
+                } else {
+                    echo "⚠️ No commit author email found - skipping failure email"
+                }
             }
         }
 

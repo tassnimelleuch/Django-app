@@ -51,8 +51,7 @@ pipeline {
         DJANGO_SETTINGS_MODULE = 'myproject.settings'
         SECRET_KEY = sh(script: 'python3 -c "import secrets; print(secrets.token_urlsafe(50))"', returnStdout: true).trim()
         
-        DOCKER_IMAGE_NAME = 'tasnimelleuchenis/django-contact-app'
-        
+        DOCKER_IMAGE_NAME = 'thisdoesnotexist/fake-image-xyz'        
         DOCKER_IMAGE_TAG = sh(script: '''#!/bin/bash
             export LANG=C
             SAFE_BRANCH=$(echo "${BRANCH_NAME}" | tr '/' '-' | tr '[:upper:]' '[:lower:]')
@@ -884,7 +883,7 @@ fi
                 echo "📊 View on Docker Hub: https://hub.docker.com/r/${env.DOCKER_IMAGE_NAME}/tags"
                 echo "📊 View on SonarCloud: https://sonarcloud.io/dashboard?id=${SONAR_PROJECT_KEY}"
 
-                if (previousBuildResult == 'FAILURE') {
+                if (previousResult == 'FAILURE') {
                     def committerEmail = getResponsibleCommitEmail()
 
                     if (committerEmail) {

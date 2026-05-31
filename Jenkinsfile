@@ -51,7 +51,7 @@ pipeline {
         DJANGO_SETTINGS_MODULE = 'myproject.settings'
         SECRET_KEY = sh(script: 'python3 -c "import secrets; print(secrets.token_urlsafe(50))"', returnStdout: true).trim()
         
-        DOCKER_IMAGE_NAME = 'fake'
+        DOCKER_IMAGE_NAME = 'tasnimelleuchenis/django-contact-app'
         
         DOCKER_IMAGE_TAG = sh(script: '''#!/bin/bash
             export LANG=C

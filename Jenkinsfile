@@ -51,16 +51,16 @@ pipeline {
         DJANGO_SETTINGS_MODULE = 'myproject.settings'
         SECRET_KEY = sh(script: 'python3 -c "import secrets; print(secrets.token_urlsafe(50))"', returnStdout: true).trim()
         
-        DOCKER_IMAGE_NAME = 'tasnimelleuchenis/django-contact-app'
+        DOCKER_IMAGE_NAME = 'fake'
         
         DOCKER_IMAGE_TAG = sh(script: '''#!/bin/bash
             export LANG=C
             SAFE_BRANCH=$(echo "${BRANCH_NAME}" | tr '/' '-' | tr '[:upper:]' '[:lower:]')
-            echo "${SAFE_BRANCH}-$(date "+%Y-%m-%d-at-%H-%M-%S")-build-${BUILD_NUMBER}"
+            echo "${SAFE_BRANCH}-$(date -u -d '+1 hour' "+%Y-%m-%d-at-%H-%M-%S")-build-${BUILD_NUMBER}"
         ''', returnStdout: true).trim()
         HUMAN_READABLE_DATE = sh(script: '''#!/bin/bash
             export LANG=C
-            date "+%Y-%m-%d at %H:%M:%S"
+            date -u -d '+1 hour' "+%Y-%m-%d at %H:%M:%S UTC+1"
         ''', returnStdout: true).trim()
         
         DOCKER_PULL_RETRIES = '5'
